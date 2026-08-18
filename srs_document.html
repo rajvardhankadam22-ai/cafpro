@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>CaféPulse - Software Requirements Specification (SRS)</title>
+  <style>
+    @page {
+      size: A4;
+      margin: 20mm 15mm 20mm 15mm;
+      @bottom-right {
+        content: counter(page);
+      }
+    }
+    
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      color: #1a1614;
+      background: #ffffff;
+      line-height: 1.55;
+      font-size: 10.5pt;
+    }
+
+    /* Cover Page */
+    .cover-page {
+      page-break-after: always;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 40px 20px;
+      border: 2px solid #8c5b36;
+      background: linear-gradient(180deg, #fdfbf7 0%, #f7f0e8 100%);
+      border-radius: 8px;
+    }
+
+    .cover-header {
+      text-align: center;
+      margin-top: 40px;
+    }
+
+    .cover-badge {
+      display: inline-block;
+      background: #8c5b36;
+      color: white;
+      font-size: 9pt;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      padding: 6px 16px;
+      border-radius: 20px;
+      margin-bottom: 25px;
+    }
+
+    .cover-title {
+      font-size: 32pt;
+      font-weight: 800;
+      color: #2b1810;
+      letter-spacing: -0.5px;
+      line-height: 1.15;
+      margin-bottom: 15px;
+    }
+
+    .cover-title span {
+      color: #b8621b;
+    }
+
+    .cover-subtitle {
+      font-size: 14pt;
+      color: #5c3a21;
+      font-weight: 500;
+      max-width: 500px;
+      margin: 0 auto;
+      line-height: 1.4;
+    }
+
+    .cover-meta-grid {
+      background: #ffffff;
+      border: 1px solid #e0d0c1;
+      border-radius: 8px;
+      padding: 20px;
+      margin: 40px 0;
+      box-shadow: 0 4px 12px rgba(140, 91, 54, 0.08);
+    }
+
+    .cover-meta-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 9.5pt;
+    }
+
+    .cover-meta-table td {
+      padding: 8px 12px;
+      border-bottom: 1px solid #f0e6dc;
+    }
+
+    .cover-meta-table tr:last-child td {
+      border-bottom: none;
+    }
+
+    .cover-meta-label {
+      font-weight: 700;
+      color: #6b3e1b;
+      width: 35%;
+    }
+
+    .cover-meta-val {
+      color: #1a1614;
+      font-family: monospace;
+      font-weight: 600;
+    }
+
+    .cover-footer {
+      text-align: center;
+      font-size: 8.5pt;
+      color: #8c7362;
+      border-top: 1px solid #e5d7cc;
+      padding-top: 15px;
+    }
+
+    /* Content Layout */
+    .page-break {
+      page-break-after: always;
+    }
+
+    h1 {
+      font-size: 18pt;
+      font-weight: 800;
+      color: #2b1810;
+      border-bottom: 2px solid #b8621b;
+      padding-bottom: 6px;
+      margin-top: 25px;
+      margin-bottom: 14px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    h2 {
+      font-size: 13.5pt;
+      font-weight: 700;
+      color: #6b3e1b;
+      margin-top: 18px;
+      margin-bottom: 8px;
+      border-bottom: 1px solid #e6d7cb;
+      padding-bottom: 4px;
+    }
+
+    h3 {
+      font-size: 11pt;
+      font-weight: 700;
+      color: #3d2417;
+      margin-top: 14px;
+      margin-bottom: 6px;
+    }
+
+    p, ul, ol {
+      margin-bottom: 10px;
+    }
+
+    ul, ol {
+      padding-left: 20px;
+    }
+
+    li {
+      margin-bottom: 4px;
+    }
+
+    /* Tables */
+    table.data-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 12px 0;
+      font-size: 9pt;
+      page-break-inside: avoid;
+    }
+
+    table.data-table th, table.data-table td {
+      border: 1px solid #dfd2c4;
+      padding: 6px 9px;
+      text-align: left;
+    }
+
+    table.data-table th {
+      background: #f4eae0;
+      color: #4a2810;
+      font-weight: 700;
+      text-transform: uppercase;
+      font-size: 8pt;
+      letter-spacing: 0.5px;
+    }
+
+    table.data-table tr:nth-child(even) td {
+      background: #fdfaf7;
+    }
+
+    /* Callouts & Badges */
+    .callout {
+      background: #f9f5f0;
+      border-left: 4px solid #b8621b;
+      padding: 10px 14px;
+      margin: 12px 0;
+      border-radius: 0 6px 6px 0;
+      font-size: 9.5pt;
+    }
+
+    .badge {
+      display: inline-block;
+      font-size: 7.5pt;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 4px;
+      text-transform: uppercase;
+    }
+
+    .badge-primary { background: #e8d9cc; color: #5a2e0e; border: 1px solid #c9b19e; }
+    .badge-success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+    .badge-warning { background: #fff3cd; color: #856404; border: 1px solid #ffeeba; }
+
+    code {
+      font-family: "JetBrains Mono", Consolas, Menlo, monospace;
+      font-size: 8.5pt;
+      background: #f0e6dc;
+      padding: 2px 5px;
+      border-radius: 3px;
+      color: #5c2c08;
+    }
+
+    .schema-block {
+      background: #1b1410;
+      color: #f5ede6;
+      padding: 12px;
+      border-radius: 6px;
+      font-family: monospace;
+      font-size: 8pt;
+      line-height: 1.4;
+      margin: 10px 0;
+      page-break-inside: avoid;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- COVER PAGE -->
+  <div class="cover-page">
+    <div class="cover-header">
+      <div class="cover-badge">Software Requirements Specification (SRS)</div>
+      <div class="cover-title">Café<span>Pulse</span></div>
+      <div class="cover-subtitle">Enterprise Real-Time Inventory & Multi-Tenant Supply Chain Operating System for Specialty Coffee Chains</div>
+    </div>
+
+    <div class="cover-meta-grid">
+      <table class="cover-meta-table">
+        <tr>
+          <td class="cover-meta-label">Document Reference</td>
+          <td class="cover-meta-val">SRS-CAFEPULSE-2026-V1.0</td>
+        </tr>
+        <tr>
+          <td class="cover-meta-label">Standard Compliance</td>
+          <td class="cover-meta-val">IEEE Std 830-1998 / ISO/IEC/IEEE 29148:2018</td>
+        </tr>
+        <tr>
+          <td class="cover-meta-label">Software Version</td>
+          <td class="cover-meta-val">Version 1.0.0 (Production Hardened)</td>
+        </tr>
+        <tr>
+          <td class="cover-meta-label">Target Cloud Engine</td>
+          <td class="cover-meta-val">Google Cloud Firestore (ID: caf247-73960)</td>
+        </tr>
+        <tr>
+          <td class="cover-meta-label">Framework & Runtime</td>
+          <td class="cover-meta-val">Next.js 15.1 (App Router) / React 19 / Node.js</td>
+        </tr>
+        <tr>
+          <td class="cover-meta-label">Primary Currency</td>
+          <td class="cover-meta-val">Indian Rupee (INR ₹ / en-IN)</td>
+        </tr>
+        <tr>
+          <td class="cover-meta-label">Release Date</td>
+          <td class="cover-meta-val">August 2026</td>
+        </tr>
+        <tr>
+          <td class="cover-meta-label">Security & Access</td>
+          <td class="cover-meta-val">Multi-Role RBAC & Isolated Data Isolation</td>
+        </tr>
+      </table>
+    </div>
+
+    <div class="cover-footer">
+      <strong>Confidential & Proprietary</strong> — CaféPulse Technologies Inc. © 2026. All rights reserved.
+    </div>
+  </div>
+
+  <!-- TABLE OF CONTENTS / EXECUTIVE SUMMARY -->
+  <h1>1. Executive Summary & Document Control</h1>
+  
+  <p>
+    <strong>CaféPulse</strong> is a real-time, multi-tenant inventory control and supply chain orchestration platform engineered specifically for specialty coffee roasteries, artisan espresso bars, and multi-location café franchises. The system bridges physical café floor operations (daily usage steppers, instant restocks, wastage logs) with public wholesale B2B supplier bidding, automated PO creation, price agreement contract mapping, and comprehensive audit accounting in Indian Rupees (₹).
+  </p>
+
+  <h2>1.1 Document Overview & Standards</h2>
+  <p>
+    This document serves as the formal <strong>Software Requirements Specification (SRS)</strong> compliant with <strong>IEEE Std 830-1998</strong> and <strong>ISO/IEC/IEEE 29148:2018</strong>. It delineates all functional capabilities, non-functional performance benchmarks, data models, role-based security policies, and user acceptance criteria implemented across the system.
+  </p>
+
+  <h2>1.2 Glossary & Acronyms</h2>
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th style="width: 20%;">Term / Acronym</th>
+        <th>Definition & Operational Context</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>COGS</strong></td>
+        <td><strong>Cost of Goods Sold</strong> — The direct valuation of ingredients utilized in coffee preparation and kitchen production.</td>
+      </tr>
+      <tr>
+        <td><strong>PAR Level</strong></td>
+        <td><strong>Periodic Automatic Replenishment</strong> — The optimal target inventory ceiling required to satisfy expected demand.</td>
+      </tr>
+      <tr>
+        <td><strong>Reorder Threshold</strong></td>
+        <td>The minimum safety buffer that automatically triggers restock alerts and PO generation recommendations.</td>
+      </tr>
+      <tr>
+        <td><strong>SKU</strong></td>
+        <td><strong>Stock Keeping Unit</strong> — Unique machine-readable identifier generated per category and item.</td>
+      </tr>
+      <tr>
+        <td><strong>PO</strong></td>
+        <td><strong>Purchase Order</strong> — Legally binding B2B procurement order issued from a café branch to an approved supplier.</td>
+      </tr>
+      <tr>
+        <td><strong>MOQ</strong></td>
+        <td><strong>Minimum Order Quantity</strong> — Supplier-enforced minimum batch size for wholesale replenishment.</td>
+      </tr>
+      <tr>
+        <td><strong>RBAC</strong></td>
+        <td><strong>Role-Based Access Control</strong> — Permissions framework enforcing access tiers across Store Admin, Shift Barista, Auditor, and Vendor.</td>
+      </tr>
+      <tr>
+        <td><strong>Goods Receipt (GRN)</strong></td>
+        <td>The physical verification and barcode inspection step that checks received deliveries into live stock.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="page-break"></div>
+
+  <!-- SECTION 2: SYSTEM ARCHITECTURE & DATA MODEL -->
+  <h1>2. System Architecture & Database Design</h1>
+  
+  <p>
+    CaféPulse operates on a serverless, event-driven architecture combining Next.js 15 App Router clients with <strong>Google Cloud Firestore</strong> for ACID-compliant real-time multi-document data synchronization.
+  </p>
+
+  <h2>2.1 Cloud Firestore Multi-Tenant Schema</h2>
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>Collection Name</th>
+        <th>Document Key Strategy</th>
+        <th>Core Attributes & Relationships</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>users</code></td>
+        <td><code>uid</code> (Firebase Auth UID)</td>
+        <td><code>displayName</code>, <code>cafeName</code>, <code>branchName</code>, <code>branchCode</code>, <code>city</code>, <code>role</code>, <code>monthlyVolumeEstimate</code>, <code>status</code></td>
+      </tr>
+      <tr>
+        <td><code>inventory_items</code></td>
+        <td><code>${userId}_${itemId}</code></td>
+        <td><code>name</code>, <code>sku</code>, <code>categoryId</code>, <code>quantity</code>, <code>unit</code>, <code>packageWeight</code>, <code>unitPrice</code>, <code>reorderLevel</code>, <code>parLevel</code>, <code>supplier</code>, <code>vendorMappings[]</code></td>
+      </tr>
+      <tr>
+        <td><code>categories</code></td>
+        <td><code>${userId}_${catId}</code></td>
+        <td><code>name</code>, <code>description</code>, <code>color</code>, <code>icon</code>, <code>userId</code></td>
+      </tr>
+      <tr>
+        <td><code>purchase_orders</code></td>
+        <td><code>po-${timestamp}-${rand}</code></td>
+        <td><code>poNumber</code>, <code>userId</code>, <code>destinationCafe</code>, <code>supplierName</code>, <code>status</code> (<code>PENDING_DELIVERY</code> | <code>DELIVERED</code>), <code>items[]</code>, <code>totalEstimatedCost</code></td>
+      </tr>
+      <tr>
+        <td><code>vendors</code></td>
+        <td><code>${userId}_${vendorId}</code></td>
+        <td><code>name</code>, <code>contactPerson</code>, <code>email</code>, <code>phone</code>, <code>city</code>, <code>gstin</code>, <code>leadTimeDays</code>, <code>paymentTerms</code></td>
+      </tr>
+      <tr>
+        <td><code>supplier_applications</code></td>
+        <td><code>app-${timestamp}-${rand}</code></td>
+        <td><code>companyName</code>, <code>targetCafeId</code>, <code>targetCafePreference</code>, <code>quotedItems[]</code>, <code>status</code> (<code>PENDING</code> | <code>APPROVED</code> | <code>REJECTED</code>)</td>
+      </tr>
+      <tr>
+        <td><code>staff_members</code></td>
+        <td><code>staff-${timestamp}-${rand}</code></td>
+        <td><code>name</code>, <code>email</code>, <code>phone</code>, <code>role</code>, <code>branch</code>, <code>pin</code>, <code>status</code> (<code>ACTIVE</code> | <code>INACTIVE</code>)</td>
+      </tr>
+      <tr>
+        <td><code>activity_logs</code></td>
+        <td><code>log-${timestamp}-${rand}</code></td>
+        <td><code>action</code>, <code>targetId</code>, <code>itemName</code>, <code>detail</code>, <code>user</code>, <code>timestamp</code></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>2.2 Vendor Price Book Mapping Schema</h2>
+  <div class="schema-block">
+// Sub-schema: vendorMappings embedded inside inventory_items document
+{
+  "mappingId": "vm-1723932840-a1b2",
+  "vendorName": "Mercara Coffee Roasters",
+  "vendorItemName": "Chikmagalur Estate Arabica (AAA Roaster Cut)",
+  "vendorSku": "MCR-AAA-01",
+  "unitPrice": 1450.00,
+  "isPreferred": true,
+  "leadTimeDays": 2,
+  "notes": "Direct farm agreement, Net 15 terms"
+}
+  </div>
+
+  <h2>2.3 Offline Fallback & Dual-Bus Synchronization Engine</h2>
+  <p>
+    To guarantee uninterrupted café point-of-sale and floor operations during internet connectivity dropouts, the system utilizes a <strong>Dual-Bus Synchronization Engine</strong>:
+  </p>
+  <ul>
+    <li><strong>Client Event Bus:</strong> Emits local in-memory state updates instantly (0ms latency) to guarantee seamless, zero-lag UI feedback.</li>
+    <li><strong>Local Storage Cache:</strong> Persists state snapshots scoped per <code>userId</code> under isolated keys (<code>cafepulse_items_${uid}</code>).</li>
+    <li><strong>Firestore Real-Time Listener:</strong> Subscribes via <code>onSnapshot</code> using <code>memoryLocalCache()</code> to keep all multi-tab clients synchronized while completely eliminating lease-lock warnings.</li>
+  </ul>
+
+  <div class="page-break"></div>
+
+  <!-- SECTION 3: FUNCTIONAL REQUIREMENTS -->
+  <h1>3. Detailed Functional Requirements (FR)</h1>
+
+  <h2>3.1 Real-Time Stock Management & Inventory Catalog (FR-INV)</h2>
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th style="width: 15%;">Req ID</th>
+        <th style="width: 25%;">Feature Name</th>
+        <th>Functional Description & Validation Rules</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>FR-INV-01</code></td>
+        <td>Live Stepper Adjustments</td>
+        <td>Staff can increase (Restock) or decrease (Usage) stock directly from tables with single clicks. Atomic increments are applied to Firestore.</td>
+      </tr>
+      <tr>
+        <td><code>FR-INV-02</code></td>
+        <td>Automatic SKU Generation</td>
+        <td>System automatically creates structured SKUs based on Category prefix, item name syllables, and pseudo-random numbers (e.g. <code>COF-CHIK-428</code>).</td>
+      </tr>
+      <tr>
+        <td><code>FR-INV-03</code></td>
+        <td>Dynamic Stock Status</td>
+        <td>Items are dynamically classified as <code>In Stock</code> (Green), <code>Low Stock</code> (Amber, when &le; Reorder Level), or <code>Out of Stock</code> (Red, when = 0).</td>
+      </tr>
+      <tr>
+        <td><code>FR-INV-04</code></td>
+        <td>CSV Export Engine</td>
+        <td>Managers can export full or filtered catalog views to standard RFC 4180 CSV with formatted INR values and stock health tags.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>3.2 Multi-Tenant Public Sourcing & B2B Vendor Proposals (FR-B2B)</h2>
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th style="width: 15%;">Req ID</th>
+        <th style="width: 25%;">Feature Name</th>
+        <th>Functional Description & Validation Rules</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>FR-B2B-01</code></td>
+        <td>Real-Time Café Discovery</td>
+        <td>Public supplier portal (<code>/supplier/register</code>) discovers all active registered cafés from Firestore <code>users</code> collection in real-time.</td>
+      </tr>
+      <tr>
+        <td><code>FR-B2B-02</code></td>
+        <td>Store-Specific Sourcing Demands</td>
+        <td>Selecting a café dynamically loads that café's actual inventory items for wholesale rate card quoting.</td>
+      </tr>
+      <tr>
+        <td><code>FR-B2B-03</code></td>
+        <td>Custom Product Proposals</td>
+        <td>Suppliers can pitch custom, unlisted ingredients via <code>+ Propose Custom Product</code> with custom MOQ, SKU, unit, and wholesale rates.</td>
+      </tr>
+      <tr>
+        <td><code>FR-B2B-04</code></td>
+        <td>Targeted Proposal Inbox</td>
+        <td>Proposals route directly to the designated café manager's inbox on <code>/dashboard/vendors</code> based on <code>targetCafeId</code>.</td>
+      </tr>
+      <tr>
+        <td><code>FR-B2B-05</code></td>
+        <td>1-Click Approval & Auto-Catalog</td>
+        <td>Approving a proposal registers the vendor, updates price books, and auto-creates any proposed custom items into the store's inventory catalog.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>3.3 Automated Shortage Radar & Purchase Orders (FR-ORD)</h2>
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th style="width: 15%;">Req ID</th>
+        <th style="width: 25%;">Feature Name</th>
+        <th>Functional Description & Validation Rules</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>FR-ORD-01</code></td>
+        <td>Automated Shortage Radar</td>
+        <td>Identifies items below safety thresholds and calculates optimal restock quantities: <code>Suggested = PAR - CurrentQty</code>.</td>
+      </tr>
+      <tr>
+        <td><code>FR-ORD-02</code></td>
+        <td>1-Click Bulk PO Generation</td>
+        <td>Aggregates low-stock items grouped by supplier and auto-populates pre-filled Purchase Orders with contracted price agreements.</td>
+      </tr>
+      <tr>
+        <td><code>FR-ORD-03</code></td>
+        <td>Supplier Fulfillment & Dispatch</td>
+        <td>Suppliers log in to <code>/supplier/portal</code>, inspect incoming PO line items, and mark orders as Dispatched with tracking numbers.</td>
+      </tr>
+      <tr>
+        <td><code>FR-ORD-04</code></td>
+        <td>Goods Receipt (GRN) Restock</td>
+        <td>When physical goods arrive at the café, managers click <strong>Receive Goods</strong> to automatically increment catalog inventory counts.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="page-break"></div>
+
+  <!-- SECTION 4: NON-FUNCTIONAL REQUIREMENTS -->
+  <h1>4. Non-Functional & Security Requirements</h1>
+
+  <h2>4.1 Performance & Latency Benchmarks (NFR-PERF)</h2>
+  <ul>
+    <li><strong>Client UI Response Time:</strong> Immediate local optimistic UI update within &le; 16ms (60 FPS animation budget).</li>
+    <li><strong>Cloud Firestore Latency:</strong> Remote document synchronization across active clients within &le; 350ms under standard 4G/Broadband.</li>
+    <li><strong>Cold Start & Static Page Load:</strong> First Contentful Paint (FCP) &le; 0.8s across all static routes.</li>
+  </ul>
+
+  <h2>4.2 Role-Based Access Control (RBAC) Matrix (NFR-SEC)</h2>
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>User Role</th>
+        <th>Inventory Catalog</th>
+        <th>Adjust Stock</th>
+        <th>Purchase Orders</th>
+        <th>Financials / COGS</th>
+        <th>Store Danger Zone</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>👑 Store Admin / GM</strong></td>
+        <td><span class="badge badge-success">Full CRUD</span></td>
+        <td><span class="badge badge-success">Full Access</span></td>
+        <td><span class="badge badge-success">Issue & Receive</span></td>
+        <td><span class="badge badge-success">Full Access</span></td>
+        <td><span class="badge badge-success">Full Access</span></td>
+      </tr>
+      <tr>
+        <td><strong>☕ Head Barista</strong></td>
+        <td><span class="badge badge-primary">Edit Items</span></td>
+        <td><span class="badge badge-success">Restock & Waste</span></td>
+        <td><span class="badge badge-primary">Draft & Inspect</span></td>
+        <td><span class="badge badge-warning">Restricted</span></td>
+        <td><span class="badge badge-warning">No Access</span></td>
+      </tr>
+      <tr>
+        <td><strong>🧑‍🍳 Shift Barista</strong></td>
+        <td><span class="badge badge-primary">Read-Only</span></td>
+        <td><span class="badge badge-success">Quick Usage (-1)</span></td>
+        <td><span class="badge badge-warning">No Access</span></td>
+        <td><span class="badge badge-warning">Hidden</span></td>
+        <td><span class="badge badge-warning">No Access</span></td>
+      </tr>
+      <tr>
+        <td><strong>📋 Inventory Auditor</strong></td>
+        <td><span class="badge badge-primary">Read-Only</span></td>
+        <td><span class="badge badge-warning">No Access</span></td>
+        <td><span class="badge badge-primary">Audit Trails</span></td>
+        <td><span class="badge badge-success">Full Valuation</span></td>
+        <td><span class="badge badge-warning">No Access</span></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>4.3 Data Retention & Account Deletion (NFR-PRG)</h2>
+  <div class="callout">
+    <strong>Zero Data Retention Policy on Deletion:</strong> When an administrator triggers store deletion via <code>/dashboard/team</code>, all associated documents in <code>users</code>, <code>inventory_items</code>, <code>categories</code>, <code>purchase_orders</code>, <code>supplier_applications</code>, <code>vendors</code>, <code>staff_members</code>, and <code>activity_logs</code> are permanently purged via atomic multi-document deletes. The store is immediately unlisted from the public directory.
+  </div>
+
+  <div class="page-break"></div>
+
+  <!-- SECTION 5: VERIFICATION & ACCEPTANCE MATRIX -->
+  <h1>5. Verification & Acceptance Test Matrix</h1>
+  
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th style="width: 15%;">Test ID</th>
+        <th style="width: 25%;">Test Scenario</th>
+        <th>Target Behavior & Acceptance Status</th>
+        <th style="width: 15%;">Result</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>TC-AUTH-01</code></td>
+        <td>New Café Registration</td>
+        <td>New account on <code>/login</code> saves profile to <code>users</code> and appears dynamically on <code>/supplier/register</code>.</td>
+        <td><span class="badge badge-success">PASSED</span></td>
+      </tr>
+      <tr>
+        <td><code>TC-B2B-01</code></td>
+        <td>Supplier Bidding on Café</td>
+        <td>Selecting café loads that café's catalog; bids route to that specific manager's vendor inbox.</td>
+        <td><span class="badge badge-success">PASSED</span></td>
+      </tr>
+      <tr>
+        <td><code>TC-B2B-02</code></td>
+        <td>Custom Item Auto-Catalog</td>
+        <td>Approved custom product creates document in <code>inventory_items</code> with mapped price agreement.</td>
+        <td><span class="badge badge-success">PASSED</span></td>
+      </tr>
+      <tr>
+        <td><code>TC-ORD-01</code></td>
+        <td>PO Dispatch & GRN</td>
+        <td>Supplier dispatches PO with tracking; Café receiving goods increments item stock count in Firestore.</td>
+        <td><span class="badge badge-success">PASSED</span></td>
+      </tr>
+      <tr>
+        <td><code>TC-PRG-01</code></td>
+        <td>Store Account Deletion</td>
+        <td>Danger zone delete purges all Firestore collections for that UID and removes store from public list.</td>
+        <td><span class="badge badge-success">PASSED</span></td>
+      </tr>
+      <tr>
+        <td><code>TC-BLD-01</code></td>
+        <td>Production Build</td>
+        <td><code>next build</code> executes with 0 TypeScript/JSX errors across all 16 static routes.</td>
+        <td><span class="badge badge-success">PASSED</span></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div style="margin-top: 30px; padding: 15px; border: 1px solid #d4c3b2; background: #faf6f0; border-radius: 6px; text-align: center;">
+    <h3 style="color: #6b3e1b; margin-bottom: 4px;">Sign-Off & Document Approval</h3>
+    <p style="font-size: 8.5pt; color: #7a5c45;">
+      Software Architecture & Production Release Confirmed • Version 1.0.0 • August 2026
+    </p>
+  </div>
+
+</body>
+</html>

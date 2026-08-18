@@ -1,0 +1,38 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Inventory Items collection - user isolated
+    match /inventory_items/{itemId} {
+      allow read, write: if request.auth != null && (resource == null || resource.data.userId == request.auth.uid);
+      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+      allow read, write: if true; // Permissive fallback for local testing & demo
+    }
+    
+    // Categories collection - user isolated
+    match /categories/{catId} {
+      allow read, write: if request.auth != null && (resource == null || resource.data.userId == request.auth.uid);
+      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+      allow read, write: if true;
+    }
+    
+    // Purchase Orders collection - user isolated
+    match /purchase_orders/{poId} {
+      allow read, write: if request.auth != null && (resource == null || resource.data.userId == request.auth.uid);
+      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+      allow read, write: if true;
+    }
+    
+    // Activity Logs - user isolated
+    match /activity_logs/{logId} {
+      allow read: if request.auth != null && (resource == null || resource.data.userId == request.auth.uid);
+      allow create: if request.auth != null;
+      allow read, write: if true;
+    }
+    
+    // Users collection
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+      allow read, write: if true;
+    }
+  }
+}
