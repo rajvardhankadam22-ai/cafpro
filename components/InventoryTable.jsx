@@ -375,7 +375,7 @@ export default function InventoryTable({
         </table>
       </div>
 
-      {/* Mobile Card List View */}
+      {/* Mobile Card List View (Optimized for High-Speed Touch) */}
       <div className="lg:hidden divide-y divide-cafe-100 dark:divide-espresso-800/60 p-3 space-y-3">
         <AnimatePresence initial={false}>
           {sortedItems.map((item) => {
@@ -387,21 +387,25 @@ export default function InventoryTable({
               <motion.div
                 key={item.id}
                 layout
-                className="p-4 space-y-3 bg-white dark:bg-[#140F0D] rounded-xl border border-cafe-200/70 dark:border-espresso-800/70 shadow-xs"
+                className="p-4 space-y-3 bg-white dark:bg-[#140F0D] rounded-2xl border border-cafe-200/80 dark:border-espresso-800/80 shadow-xs"
               >
                 <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <h4 className="font-semibold text-espresso-950 dark:text-cafe-50 text-sm">
+                  <div className="min-w-0 flex-1">
+                    <h4 className="font-semibold text-espresso-950 dark:text-cafe-50 text-sm truncate">
                       {item.name}
                     </h4>
-                    <div className="flex items-center gap-2 mt-0.5 text-xs text-espresso-400 dark:text-cafe-400 font-mono">
-                      <span>{item.sku || 'NO-SKU'}</span>
+                    <div className="flex items-center gap-2 mt-1 text-xs text-espresso-400 dark:text-cafe-400 flex-wrap">
+                      <span className="font-mono text-espresso-600 dark:text-cafe-300 font-medium whitespace-nowrap">
+                        {item.sku || 'NO-SKU'}
+                      </span>
                       <span>•</span>
-                      <span className="font-sans font-medium text-espresso-600 dark:text-cafe-300">{categoryName}</span>
+                      <span className="font-sans font-medium text-espresso-600 dark:text-cafe-300 whitespace-nowrap">
+                        {categoryName}
+                      </span>
                     </div>
                   </div>
                   <span
-                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium border ${statusInfo.badgeClass}`}
+                    className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-medium border shrink-0 ${statusInfo.badgeClass}`}
                   >
                     <span className={`w-1.5 h-1.5 rounded-full ${statusInfo.dotClass}`} />
                     {statusInfo.label}
@@ -426,7 +430,7 @@ export default function InventoryTable({
                 )}
 
                 {/* Stock Quantity Display & Actions */}
-                <div className="flex items-center justify-between pt-2 border-t border-cafe-100 dark:border-espresso-800/60">
+                <div className="flex items-center justify-between pt-2.5 border-t border-cafe-100 dark:border-espresso-800/60">
                   <div>
                     <p className="text-[10px] text-espresso-400 uppercase font-semibold">In Stock</p>
                     <p className="font-mono font-bold text-sm text-espresso-950 dark:text-cafe-50 tabular-nums">
@@ -434,27 +438,33 @@ export default function InventoryTable({
                     </p>
                   </div>
 
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-1.5">
                     <button
+                      type="button"
                       onClick={() => onOpenRestock(item)}
-                      className="p-2 text-espresso-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 rounded-lg"
-                      title="Restock"
+                      className="w-9 h-9 flex items-center justify-center rounded-xl bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800/50 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 active:scale-95 touch-manipulation transition-all"
+                      title="Quick Restock"
+                      aria-label="Quick Restock"
                     >
                       <RefreshCw className="w-4 h-4" />
                     </button>
                     {!isBaristaMode && (
                       <>
                         <button
+                          type="button"
                           onClick={() => onEdit(item)}
-                          className="p-2 text-espresso-400 hover:text-caramel-600 hover:bg-caramel-50 dark:hover:bg-espresso-800 rounded-lg"
+                          className="w-9 h-9 flex items-center justify-center rounded-xl bg-cafe-50 dark:bg-espresso-900/60 border border-cafe-200/80 dark:border-espresso-700/80 text-espresso-700 dark:text-cafe-200 hover:bg-caramel-50 hover:text-caramel-700 active:scale-95 touch-manipulation transition-all"
                           title="Edit Item"
+                          aria-label="Edit Item"
                         >
                           <Edit3 className="w-4 h-4" />
                         </button>
                         <button
+                          type="button"
                           onClick={() => onDelete(item)}
-                          className="p-2 text-espresso-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 rounded-lg"
+                          className="w-9 h-9 flex items-center justify-center rounded-xl bg-cafe-50 dark:bg-espresso-900/60 border border-cafe-200/80 dark:border-espresso-700/80 text-espresso-700 dark:text-cafe-200 hover:bg-red-50 hover:text-red-600 dark:hover:text-red-400 active:scale-95 touch-manipulation transition-all"
                           title="Delete Item"
+                          aria-label="Delete Item"
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
