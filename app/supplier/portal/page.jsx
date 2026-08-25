@@ -31,21 +31,24 @@ import {
   Key,
   UserPlus,
   PlusCircle,
+  Plus,
   Check,
   X,
+  TrendingUp,
 } from 'lucide-react';
 import Link from 'next/link';
 import { formatCurrency } from '@/lib/utils';
-import PagePurposeBanner from '@/components/PagePurposeBanner';
 import {
-  subscribeToVendors,
+  subscribeToAllVendors,
+  subscribeToAllRegisteredCafes,
   subscribeToPurchaseOrders,
   subscribeToInventory,
   updatePurchaseOrderDispatch,
   addVendor,
   submitSupplierApplication,
-  REGISTERED_CAFES,
+  addInventoryItem,
 } from '@/services/inventoryService';
+import { INITIAL_VENDORS } from '@/services/seedData';
 import { useToast } from '@/components/Toast';
 
 const LOCAL_SUPPLIER_KEY = 'cafepulse_supplier_session';
@@ -53,7 +56,8 @@ const LOCAL_SUPPLIER_KEY = 'cafepulse_supplier_session';
 export default function SupplierPortalPage() {
   const toast = useToast();
 
-  const [vendors, setVendors] = useState([]);
+  const [vendors, setVendors] = useState(INITIAL_VENDORS);
+  const [liveCafes, setLiveCafes] = useState([]);
   const [purchaseOrders, setPurchaseOrders] = useState([]);
   const [inventoryItems, setInventoryItems] = useState([]);
   const [authenticatedSupplier, setAuthenticatedSupplier] = useState(null);
@@ -95,11 +99,25 @@ export default function SupplierPortalPage() {
   // Apply for Café Requirement Quote Modal state
   const [quotingDemand, setQuotingDemand] = useState(null); // { cafe, demand }
   const [quotePrice, setQuotePrice] = useState('');
-  const [quoteMoq, setQuoteMoq] = useState('1');
+  const [quoteMoq, setQuoteMoq] = useState('5');
   const [quoteLeadTime, setQuoteLeadTime] = useState('2');
   const [quoteNotes, setQuoteNotes] = useState('');
   const [isSubmittingQuote, setIsSubmittingQuote] = useState(false);
   const [submittedQuotes, setSubmittedQuotes] = useState({}); // { [demandKey]: true }
+
+  // Add Product to Rate Card Modal
+  const [isAddProductOpen, setIsAddProductOpen] = useState(false);
+  const [newProductForm, setNewProductForm] = useState({
+    name: '',
+    category: 'Coffee & Espresso Beans',
+    sku: '',
+    unitPrice: '',
+    unit: 'kg',
+    moq: '5',
+    leadTimeDays: '2',
+    notes: '',
+  });
+  const [isSavingProduct, setIsSavingProduct] = useState(false);
 
   // Check stored supplier session on load
   useEffect(() => {
@@ -112,18 +130,25 @@ export default function SupplierPortalPage() {
     setAuthChecked(true);
   }, []);
 
-  // Subscribe to live vendors, purchase orders, and inventory items
+  // Subscribe to live vendors, registered cafes, purchase orders, and inventory items
   useEffect(() => {
-    const unsubVendors = subscribeToVendors(null, (loadedVendors) => {
+    const unsubVendors = subscribeToAllVendors((loadedVendors) => {
       setVendors(loadedVendors);
       if (authenticatedSupplier) {
         const matched = loadedVendors.find(
-          (v) => v.id === authenticatedSupplier.id || (v.email && v.email.toLowerCase() === authenticatedSupplier.email?.toLowerCase())
+          (v) =>
+            v.id === authenticatedSupplier.id ||
+            (v.email && v.email.toLowerCase() === authenticatedSupplier.email?.toLowerCase()) ||
+            (v.name && v.name.toLowerCase() === authenticatedSupplier.name?.toLowerCase())
         );
         if (matched) {
-          setAuthenticatedSupplier(matched);
+          setAuthenticatedSupplier((prev) => ({ ...prev, ...matched }));
         }
       }
+    });
+
+    const unsubCafes = subscribeToAllRegisteredCafes((loadedCafes) => {
+      setLiveCafes(loadedCafes);
     });
 
     const unsubPos = subscribeToPurchaseOrders(null, (loadedPos) => {
@@ -136,12 +161,13 @@ export default function SupplierPortalPage() {
 
     return () => {
       unsubVendors();
+      unsubCafes();
       unsubPos();
       unsubItems();
     };
   }, [authenticatedSupplier?.id]);
 
-  // Handle Supplier Sign In
+  // Handle Supplier Sign In with strict password authentication
   const handleSupplierLogin = (e) => {
     e.preventDefault();
     setLoginError('');
@@ -149,39 +175,53 @@ export default function SupplierPortalPage() {
 
     const cleanEmail = loginEmail.trim().toLowerCase();
     const cleanPass = loginPassword.trim();
-    const allKnown = vendors;
-    const match = allKnown.find(
+
+    if (!cleanEmail) {
+      setLoginError('Please enter your registered supplier email or company name.');
+      setIsLoggingIn(false);
+      return;
+    }
+    if (!cleanPass) {
+      setLoginError('Please enter your account password.');
+      setIsLoggingIn(false);
+      return;
+    }
+
+    const match = vendors.find(
       (v) =>
         (v.email || '').toLowerCase().trim() === cleanEmail ||
         (v.name || '').toLowerCase().trim() === cleanEmail
     );
 
-    if (match) {
-      if (match.password && cleanPass && match.password !== cleanPass) {
-        setIsLoggingIn(false);
-        setLoginError('Incorrect password for this supplier account.');
-        return;
-      }
-
-      const session = {
-        id: match.id || 'ven-' + Date.now(),
-        name: match.name,
-        email: match.email || cleanEmail,
-        contactPerson: match.contactPerson || 'Wholesale Representative',
-        phone: match.phone || '+91 98000 00000',
-        city: match.city || 'Bengaluru',
-        leadTimeDays: match.leadTimeDays || 2,
-        paymentTerms: match.paymentTerms || 'Net 15',
-        category: match.category || 'Specialty Supplier',
-      };
-      setAuthenticatedSupplier(session);
-      localStorage.setItem(LOCAL_SUPPLIER_KEY, JSON.stringify(session));
-      toast.success(`Welcome back, ${session.name}!`, 'Supplier Signed In');
+    if (!match) {
       setIsLoggingIn(false);
-    } else {
-      setIsLoggingIn(false);
-      setLoginError('No supplier found with this email. Please click "+ Create Vendor Account" below to register.');
+      setLoginError('No supplier account found with this email. Please click "+ Create Vendor Account" below to register.');
+      return;
     }
+
+    const expectedPass = match.password || 'vendor123';
+    if (cleanPass !== expectedPass) {
+      setIsLoggingIn(false);
+      setLoginError('Incorrect password for this supplier account. Please try again.');
+      return;
+    }
+
+    const session = {
+      id: match.id || 'ven-' + Date.now(),
+      name: match.name,
+      email: match.email || cleanEmail,
+      contactPerson: match.contactPerson || 'Wholesale Representative',
+      phone: match.phone || '+91 98000 00000',
+      city: match.city || 'Bengaluru',
+      leadTimeDays: match.leadTimeDays || 2,
+      paymentTerms: match.paymentTerms || 'Net 15',
+      category: match.category || 'Specialty Supplier',
+    };
+
+    setAuthenticatedSupplier(session);
+    localStorage.setItem(LOCAL_SUPPLIER_KEY, JSON.stringify(session));
+    toast.success(`Welcome back, ${session.name}!`, 'Supplier Signed In');
+    setIsLoggingIn(false);
   };
 
   // Handle Supplier Registration (Create Account)
@@ -203,8 +243,8 @@ export default function SupplierPortalPage() {
         name: regForm.companyName.trim(),
         contactPerson: regForm.contactPerson.trim() || 'Wholesale Lead',
         email: regForm.email.trim().toLowerCase(),
-        phone: regForm.phone.trim(),
-        city: regForm.city.trim(),
+        phone: regForm.phone.trim() || '+91 98000 00000',
+        city: regForm.city.trim() || 'Bengaluru, Karnataka',
         category: regForm.category,
         password: regForm.password.trim(),
         leadTimeDays: Number(regForm.leadTimeDays) || 2,
@@ -212,7 +252,7 @@ export default function SupplierPortalPage() {
         notes: `Registered via Supplier Portal on ${new Date().toLocaleDateString()}`,
       };
 
-      const created = await addVendor(newVendorData, null, regForm.companyName);
+      const created = await addVendor(newVendorData, 'marketplace-vendors', regForm.companyName);
       const session = {
         id: created.id,
         ...newVendorData,
@@ -239,20 +279,20 @@ export default function SupplierPortalPage() {
 
   // Filter POs for this specific supplier
   const vendorOrders = currentVendor
-    ? purchaseOrders.filter(
-        (po) =>
-          po.supplierName?.toLowerCase().includes(currentVendor.name?.toLowerCase() || '') ||
-          (currentVendor.name && po.supplierName === currentVendor.name)
-      )
+    ? purchaseOrders.filter((po) => {
+        const poSup = (po.supplierName || '').toLowerCase().trim();
+        const curName = (currentVendor.name || '').toLowerCase().trim();
+        return poSup.includes(curName) || curName.includes(poSup) || po.vendorId === currentVendor.id;
+      })
     : [];
 
   // Filter inventory items supplied by this vendor
   const vendorSuppliedItems = currentVendor
     ? inventoryItems.filter((item) => {
-        const isDirect = item.supplier?.toLowerCase() === currentVendor.name?.toLowerCase();
-        const hasMapping = item.vendorMappings?.some(
+        const isDirect = (item.supplier || '').toLowerCase() === (currentVendor.name || '').toLowerCase();
+        const hasMapping = (item.vendorMappings || []).some(
           (m) =>
-            m.vendorName?.toLowerCase() === currentVendor.name?.toLowerCase() ||
+            (m.vendorName || '').toLowerCase() === (currentVendor.name || '').toLowerCase() ||
             m.vendorId === currentVendor.id
         );
         return isDirect || hasMapping;
@@ -261,64 +301,13 @@ export default function SupplierPortalPage() {
 
   const pendingShipments = vendorOrders.filter((po) => po.status === 'PENDING_DELIVERY');
   const completedShipments = vendorOrders.filter((po) => po.status === 'DELIVERED');
-
-  // Dynamically compute live café supply requirements based on real store inventory items
-  let activeStoreName = 'Artisan Specialty Café';
-  let activeBranchName = 'Main Flagship Branch';
-  if (typeof window !== 'undefined') {
-    try {
-      const u = JSON.parse(localStorage.getItem('cafepulse_user_session') || '{}');
-      if (u.cafeName) activeStoreName = u.cafeName;
-      if (u.branchName) activeBranchName = u.branchName;
-    } catch (e) {}
-  }
-
-  const liveCafes = [
-    {
-      id: 'cafe-active',
-      name: activeStoreName,
-      city: 'Bengaluru',
-      state: 'Karnataka',
-      address: `${activeBranchName}, Bengaluru, Karnataka`,
-      badge: 'Live Connected Store',
-      monthlyOrdersCount: purchaseOrders.length,
-      managerName: 'Store Operations Lead',
-      managerPhone: '+91 80 4000 8000',
-      activeDemands: (inventoryItems || []).map((item) => {
-        const par = Number(item.parLevel) || 20;
-        const qty = Number(item.quantity) || 0;
-        const price = Number(item.unitPrice) || 0;
-        const isUrgent = qty <= (Number(item.reorderLevel) || 5);
-
-        return {
-          itemId: item.id,
-          itemName: item.name,
-          monthlyQty: Math.max(1, par),
-          unit: item.unit || 'packs',
-          targetBudget: price > 0 ? `₹${price.toLocaleString('en-IN')} / ${item.unit || 'pack'}` : 'Open Quote',
-          isUrgent,
-          currentStock: qty,
-          reorderLevel: item.reorderLevel || 5,
-          sku: item.sku || '',
-        };
-      }),
-      monthlyVolumeEstimate: (() => {
-        const totalVal = (inventoryItems || []).reduce(
-          (acc, i) => acc + (Number(i.quantity) || 0) * (Number(i.unitPrice) || 0),
-          0
-        );
-        return totalVal > 0 ? `₹${totalVal.toLocaleString('en-IN')} / mo` : '₹0 / mo';
-      })(),
-    },
-  ];
-
   const totalLiveDemands = liveCafes.reduce((acc, c) => acc + (c.activeDemands?.length || 0), 0);
 
   // Open Dispatch Modal
   const handleOpenDispatchModal = (po) => {
     setDispatchPo(po);
     setTrackingNumber(`TRK-${Date.now().toString().slice(-6)}`);
-    setCarrierName('Direct Express Van / Courier');
+    setCarrierName('Direct Roastery Express Van');
     setDispatchNotes('Batch inspected and dispatched from roasting warehouse.');
     setDispatchSuccess('');
   };
@@ -337,7 +326,7 @@ export default function SupplierPortalPage() {
           carrierName: carrierName.trim(),
           notes: dispatchNotes.trim(),
         },
-        null,
+        dispatchPo.userId || null,
         currentVendor?.name || 'Supplier Portal'
       );
       setDispatchSuccess(`PO #${dispatchPo.poNumber} has been marked as Dispatched! Tracking: ${trackingNumber}`);
@@ -345,10 +334,10 @@ export default function SupplierPortalPage() {
       setTimeout(() => {
         setDispatchPo(null);
         setDispatchSuccess('');
-      }, 2000);
+      }, 1800);
     } catch (e) {
       console.error(e);
-      alert('Failed to update dispatch status');
+      toast.error('Failed to update dispatch status', 'Error');
     } finally {
       setIsDispatching(false);
     }
@@ -357,16 +346,15 @@ export default function SupplierPortalPage() {
   // Open Quote Modal for a Café Demand
   const handleOpenQuoteModal = (cafe, demand) => {
     setQuotingDemand({ cafe, demand });
-    // Parse target budget to pre-fill reasonable quote
     const budgetMatch = (demand.targetBudget || '').match(/\d[\d,]*/);
     const estimatedInitial = budgetMatch ? budgetMatch[0].replace(/,/g, '') : '1200';
     setQuotePrice(estimatedInitial);
     setQuoteMoq('5');
     setQuoteLeadTime(String(currentVendor?.leadTimeDays || 2));
-    setQuoteNotes(`Freshly packaged & batch roasted by ${currentVendor?.name}. Available for weekly scheduled drop-offs.`);
+    setQuoteNotes(`Freshly batch roasted by ${currentVendor?.name || 'Roastery Partner'}. Available for weekly scheduled deliveries.`);
   };
 
-  // Submit Quote & Proposal to the Café
+  // Submit Quote & Proposal to the Target Café
   const handleSubmitQuote = async (e) => {
     e.preventDefault();
     if (!quotingDemand || !quotePrice) return;
@@ -378,7 +366,7 @@ export default function SupplierPortalPage() {
         companyName: currentVendor.name,
         contactPerson: currentVendor.contactPerson || 'Wholesale Manager',
         email: currentVendor.email,
-        phone: currentVendor.phone || '',
+        phone: currentVendor.phone || '+91 98000 00000',
         city: currentVendor.city || 'Bengaluru',
         category: currentVendor.category || 'Specialty Supplier',
         leadTimeDays: Number(quoteLeadTime) || 2,
@@ -399,7 +387,7 @@ export default function SupplierPortalPage() {
         ],
       };
 
-      await submitSupplierApplication(appPayload, null);
+      await submitSupplierApplication(appPayload, quotingDemand.cafe.id);
 
       setSubmittedQuotes((prev) => ({ ...prev, [demandKey]: true }));
       toast.success(
@@ -414,6 +402,60 @@ export default function SupplierPortalPage() {
       setIsSubmittingQuote(false);
     }
   };
+
+  // Handle Add Item to Rate Card
+  const handleAddProductToCatalog = async (e) => {
+    e.preventDefault();
+    if (!newProductForm.name || !newProductForm.unitPrice) return;
+
+    setIsSavingProduct(true);
+    try {
+      const itemData = {
+        name: newProductForm.name.trim(),
+        categoryId: 'cat-coffee',
+        sku: newProductForm.sku.trim() || `SKU-${Date.now().toString().slice(-4)}`,
+        quantity: 50,
+        unit: newProductForm.unit || 'kg',
+        unitPrice: Number(newProductForm.unitPrice),
+        reorderLevel: 10,
+        parLevel: 40,
+        supplier: currentVendor?.name || 'Specialty Supplier',
+        notes: newProductForm.notes || `Supplied by ${currentVendor?.name}`,
+        vendorMappings: [
+          {
+            mappingId: `vm-${Date.now()}`,
+            vendorName: currentVendor?.name || 'Specialty Supplier',
+            vendorItemName: newProductForm.name.trim(),
+            vendorSku: newProductForm.sku.trim() || `SKU-${Date.now().toString().slice(-4)}`,
+            unitPrice: Number(newProductForm.unitPrice),
+            isPreferred: true,
+            leadTimeDays: Number(newProductForm.leadTimeDays) || 2,
+            notes: newProductForm.notes,
+          },
+        ],
+      };
+
+      await addInventoryItem(itemData, null);
+      toast.success(`Added ${newProductForm.name} to wholesale catalogue!`, 'Product Registered');
+      setIsAddProductOpen(false);
+      setNewProductForm({
+        name: '',
+        category: 'Coffee & Espresso Beans',
+        sku: '',
+        unitPrice: '',
+        unit: 'kg',
+        moq: '5',
+        leadTimeDays: '2',
+        notes: '',
+      });
+    } catch (err) {
+      console.error(err);
+      toast.error('Failed to add product to catalogue', 'Error');
+    } finally {
+      setIsSavingProduct(false);
+    }
+  };
+
 
   // ─────────────────────────────────────────────────────────────
   // IF NOT AUTHENTICATED: RENDER UNIFIED SUPPLIER LOGIN & SIGN UP
@@ -444,7 +486,7 @@ export default function SupplierPortalPage() {
               </span>
             </div>
             <p className="text-xs text-espresso-400 max-w-sm mx-auto">
-              Sign in to browse partner café ingredient requirements, submit supply quotations, and manage purchase order dispatches.
+              Sign in with your vendor credentials to view live café ingredient requirements, submit supply quotations, and manage shipment dispatches.
             </p>
           </div>
 
@@ -492,48 +534,51 @@ export default function SupplierPortalPage() {
 
           {/* TAB 1: SUPPLIER SIGN IN */}
           {authMode === 'login' && (
-            <form onSubmit={handleSupplierLogin} className="space-y-3.5">
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-espresso-300 mb-1.5">
-                  Supplier Email or Brand Name *
-                </label>
-                <div className="relative">
-                  <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-espresso-500" />
-                  <input
-                    type="text"
-                    value={loginEmail}
-                    onChange={(e) => setLoginEmail(e.target.value)}
-                    placeholder="e.g. b2b@roastery.com or Roastery Name"
-                    required
-                    className="w-full pl-10 pr-4 py-2.5 text-sm bg-black/60 border border-espresso-700 rounded-xl text-cafe-50 placeholder:text-espresso-600 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/30 outline-none"
-                  />
+            <div className="space-y-4">
+              <form onSubmit={handleSupplierLogin} className="space-y-3.5">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-espresso-300 mb-1.5">
+                    Supplier Email or Brand Name *
+                  </label>
+                  <div className="relative">
+                    <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-espresso-500" />
+                    <input
+                      type="text"
+                      value={loginEmail}
+                      onChange={(e) => setLoginEmail(e.target.value)}
+                      placeholder="e.g. wholesale@yourbrand.com or Brand Name"
+                      required
+                      className="w-full pl-10 pr-4 py-2.5 text-sm bg-black/60 border border-espresso-700 rounded-xl text-cafe-50 placeholder:text-espresso-600 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/30 outline-none"
+                    />
+                  </div>
                 </div>
-              </div>
 
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-espresso-300 mb-1.5">
-                  Vendor Access Password / PIN
-                </label>
-                <div className="relative">
-                  <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-espresso-500" />
-                  <input
-                    type="password"
-                    value={loginPassword}
-                    onChange={(e) => setLoginPassword(e.target.value)}
-                    placeholder="Enter your vendor account password"
-                    className="w-full pl-10 pr-4 py-2.5 text-sm bg-black/60 border border-espresso-700 rounded-xl text-cafe-50 placeholder:text-espresso-600 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/30 outline-none"
-                  />
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-espresso-300 mb-1.5">
+                    Vendor Password *
+                  </label>
+                  <div className="relative">
+                    <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-espresso-500" />
+                    <input
+                      type="password"
+                      value={loginPassword}
+                      onChange={(e) => setLoginPassword(e.target.value)}
+                      placeholder="Enter your vendor account password"
+                      required
+                      className="w-full pl-10 pr-4 py-2.5 text-sm bg-black/60 border border-espresso-700 rounded-xl text-cafe-50 placeholder:text-espresso-600 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/30 outline-none"
+                    />
+                  </div>
                 </div>
-              </div>
 
-              <button
-                type="submit"
-                disabled={isLoggingIn}
-                className="w-full py-3 px-4 rounded-xl text-xs sm:text-sm font-bold text-white bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 shadow-lg transition-all active:scale-[0.99] flex items-center justify-center gap-2 disabled:opacity-50"
-              >
-                {isLoggingIn ? <span>Authenticating...</span> : <><span>Sign In to Supplier Portal</span><ArrowRight className="w-4 h-4" /></>}
-              </button>
-            </form>
+                <button
+                  type="submit"
+                  disabled={isLoggingIn}
+                  className="w-full py-3 px-4 rounded-xl text-xs sm:text-sm font-bold text-white bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 shadow-lg transition-all active:scale-[0.99] flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  {isLoggingIn ? <span>Authenticating...</span> : <><span>Sign In to Supplier Portal</span><ArrowRight className="w-4 h-4" /></>}
+                </button>
+              </form>
+            </div>
           )}
 
           {/* TAB 2: CREATE VENDOR ACCOUNT */}
@@ -700,7 +745,7 @@ export default function SupplierPortalPage() {
                   SUPPLIER PORTAL
                 </span>
               </div>
-              <p className="text-[10px] text-espresso-400 font-medium">B2B Order Fulfillment & Rate Cards</p>
+              <p className="text-[10px] text-espresso-400 font-medium">B2B Order Fulfillment & Wholesale Exchange</p>
             </div>
           </Link>
 
@@ -762,31 +807,6 @@ export default function SupplierPortalPage() {
           </div>
         </div>
 
-        {/* Page Purpose Banner */}
-        <PagePurposeBanner
-          purpose="Wholesale supplier procurement hub. View open café inventory demands across Bangalore, apply and submit price quotations, track incoming POs, and update courier dispatch tracking."
-          badgeText="Supplier Exchange Purpose"
-          accentColor="amber"
-          actions={[
-            {
-              title: "Apply for Café Demands",
-              desc: "Browse live ingredient requirements posted by partner cafés and click 'Apply / Submit Quote' to propose wholesale prices.",
-            },
-            {
-              title: "Review Incoming POs",
-              desc: "Inspect new purchase orders placed by café managers with quantities, agreed prices, and required delivery dates.",
-            },
-            {
-              title: "Log Courier Dispatch",
-              desc: "Click 'Dispatch Order' to enter tracking numbers and delivery carrier details to update the café in real time.",
-            },
-            {
-              title: "Wholesale Rate Card",
-              desc: "Review your mapped wholesale catalogue and current contracted prices per unit.",
-            },
-          ]}
-        />
-
         {/* Quick KPI Strip */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <div className="p-4 rounded-2xl bg-[#140F0D] border border-espresso-800 flex items-center gap-3">
@@ -826,8 +846,8 @@ export default function SupplierPortalPage() {
               <Tag className="w-5 h-5" />
             </div>
             <div>
-              <p className="text-[10px] uppercase font-bold text-espresso-400">Active SKUs</p>
-              <p className="text-xl font-extrabold text-cafe-50">{vendorSuppliedItems.length}</p>
+              <p className="text-[10px] uppercase font-bold text-espresso-400">Connected Cafés</p>
+              <p className="text-xl font-extrabold text-cafe-50">{liveCafes.length}</p>
             </div>
           </div>
         </div>
@@ -843,7 +863,7 @@ export default function SupplierPortalPage() {
             }`}
           >
             <Sparkles className="w-4 h-4 text-emerald-400" />
-            <span>Café Requirements & Open Demands (Apply Here)</span>
+            <span>Café Requirements & Open Demands ({totalLiveDemands})</span>
             {activeTab === 'demand' && (
               <motion.div
                 layoutId="activeTabUnderline"
@@ -879,7 +899,7 @@ export default function SupplierPortalPage() {
             }`}
           >
             <Tag className="w-4 h-4" />
-            <span>My Contracted Rate Card ({vendorSuppliedItems.length})</span>
+            <span>My Rate Card & Products ({vendorSuppliedItems.length})</span>
             {activeTab === 'pricebook' && (
               <motion.div
                 layoutId="activeTabUnderline"
@@ -895,10 +915,10 @@ export default function SupplierPortalPage() {
             <div className="p-4 rounded-2xl bg-emerald-950/20 border border-emerald-800/40 text-xs text-emerald-300 space-y-1">
               <p className="font-bold flex items-center gap-1.5">
                 <Sparkles className="w-4 h-4 text-emerald-400" />
-                <span>Live Partner Café Supply Demands</span>
+                <span>Live Partner Café Supply Demands across Network</span>
               </p>
               <p className="text-espresso-400 text-[11px] leading-relaxed">
-                Review open ingredient restock requirements posted by specialty café stores. Click <strong>"Apply / Submit Quote"</strong> on any item to send your wholesale pricing directly to the café manager!
+                Review open ingredient restock requirements posted by registered café stores. Click <strong>"Apply / Submit Quote"</strong> on any item to send your wholesale pricing directly to the café manager's review portal!
               </p>
             </div>
 
@@ -914,8 +934,13 @@ export default function SupplierPortalPage() {
                         <Store className="w-5 h-5" />
                       </div>
                       <div>
-                        <h3 className="text-base font-bold text-cafe-50">{cafe.name}</h3>
-                        <p className="text-xs text-espresso-400">📍 {cafe.address}</p>
+                        <div className="flex items-center gap-2">
+                          <h3 className="text-base font-bold text-cafe-50">{cafe.name}</h3>
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                            {cafe.badge || 'Connected Store'}
+                          </span>
+                        </div>
+                        <p className="text-xs text-espresso-400">📍 {cafe.address || 'Bengaluru, Karnataka'}</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
@@ -926,12 +951,12 @@ export default function SupplierPortalPage() {
                   </div>
 
                   {/* Requirements Grid */}
-                  {cafe.activeDemands.length === 0 ? (
+                  {!cafe.activeDemands || cafe.activeDemands.length === 0 ? (
                     <div className="p-8 text-center rounded-2xl bg-black/40 border border-espresso-800/80 space-y-2">
                       <Package className="w-8 h-8 text-espresso-600 mx-auto" />
                       <p className="text-sm font-bold text-cafe-200">No Open Item Demands</p>
                       <p className="text-xs text-espresso-400 max-w-sm mx-auto">
-                        No ingredient requirements have been posted by this branch yet. When the café manager registers catalogue items or triggers restocks, they will appear here in real time.
+                        No ingredient requirements have been posted by this store yet. When the café manager adds items or logs low stock, they will appear here in real time.
                       </p>
                     </div>
                   ) : (
@@ -943,7 +968,11 @@ export default function SupplierPortalPage() {
                         return (
                           <div
                             key={idx}
-                            className="p-4 rounded-2xl bg-black/50 border border-espresso-800/90 flex flex-col justify-between space-y-3 hover:border-emerald-700/60 transition-all"
+                            className={`p-4 rounded-2xl bg-black/50 border flex flex-col justify-between space-y-3 transition-all ${
+                              demand.isUrgent
+                                ? 'border-amber-800/70 hover:border-amber-600'
+                                : 'border-espresso-800/90 hover:border-emerald-700/60'
+                            }`}
                           >
                             <div className="space-y-1">
                               <div className="flex items-start justify-between gap-2">
@@ -960,6 +989,11 @@ export default function SupplierPortalPage() {
                               <p className="text-[11px] text-espresso-400">
                                 Standard Rate: <span className="text-emerald-400 font-medium">{demand.targetBudget}</span>
                               </p>
+                              {demand.isUrgent && (
+                                <p className="text-[10px] font-bold text-amber-400 flex items-center gap-1">
+                                  <span>⚠️ Urgent: Café is Low on Stock ({demand.currentStock} left)</span>
+                                </p>
+                              )}
                             </div>
 
                             <div className="pt-2 border-t border-espresso-800/80">
@@ -1115,10 +1149,21 @@ export default function SupplierPortalPage() {
         {/* TAB 3: PRICE BOOK & CATALOGUE */}
         {activeTab === 'pricebook' && (
           <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <p className="text-xs text-espresso-400">
-                Current active items supplied by <strong>{currentVendor?.name}</strong> to partner cafés.
-              </p>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h3 className="text-base font-bold text-cafe-50">Wholesale Rate Card & Products</h3>
+                <p className="text-xs text-espresso-400">
+                  Products supplied by <strong>{currentVendor?.name}</strong> to partner cafés in the exchange.
+                </p>
+              </div>
+
+              <button
+                onClick={() => setIsAddProductOpen(true)}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 shadow-md transition-all active:scale-95 flex items-center gap-1.5 self-start sm:self-auto"
+              >
+                <Plus className="w-4 h-4" />
+                <span>+ Add Product to Catalogue</span>
+              </button>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -1134,7 +1179,7 @@ export default function SupplierPortalPage() {
                         {item.sku}
                       </span>
                     </div>
-                    <p className="text-xs text-espresso-400 mt-1">{item.category}</p>
+                    <p className="text-xs text-espresso-400 mt-1">{item.category || 'Specialty Supply'}</p>
                   </div>
 
                   <div className="pt-2 border-t border-espresso-800/60 flex items-center justify-between text-xs">
@@ -1149,6 +1194,16 @@ export default function SupplierPortalPage() {
                   </div>
                 </div>
               ))}
+
+              {vendorSuppliedItems.length === 0 && (
+                <div className="col-span-full p-8 text-center rounded-2xl bg-black/40 border border-espresso-800/80 space-y-2">
+                  <Tag className="w-8 h-8 text-espresso-600 mx-auto" />
+                  <p className="text-sm font-bold text-cafe-200">No Custom Catalogue Items Yet</p>
+                  <p className="text-xs text-espresso-400 max-w-sm mx-auto">
+                    Click &quot;+ Add Product to Catalogue&quot; above to add specialty coffee beans, dairy cartons, or syrups offered by your company.
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -1378,6 +1433,146 @@ export default function SupplierPortalPage() {
                   </div>
                 </form>
               )}
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ADD PRODUCT TO RATE CARD MODAL */}
+      <AnimatePresence>
+        {isAddProductOpen && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsAddProductOpen(false)}
+              className="fixed inset-0 bg-black/80 backdrop-blur-sm"
+            />
+
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className="relative w-full max-w-md bg-[#181310] rounded-3xl border border-emerald-700/60 p-6 shadow-2xl z-10 space-y-4"
+            >
+              <div className="flex items-center justify-between pb-3 border-b border-espresso-800">
+                <div className="flex items-center gap-2 text-emerald-400 font-bold text-sm">
+                  <Plus className="w-4 h-4" />
+                  <span>Add Product to Rate Card</span>
+                </div>
+                <button
+                  onClick={() => setIsAddProductOpen(false)}
+                  className="text-espresso-400 hover:text-cafe-50"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <form onSubmit={handleAddProductToCatalog} className="space-y-3.5">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-espresso-300 mb-1">
+                    Product / Item Name *
+                  </label>
+                  <input
+                    type="text"
+                    value={newProductForm.name}
+                    onChange={(e) => setNewProductForm({ ...newProductForm, name: e.target.value })}
+                    placeholder="e.g. Signature Cold Brew Estate Beans"
+                    required
+                    className="w-full px-3.5 py-2.5 text-xs font-bold bg-black/50 border border-espresso-700 rounded-xl text-cafe-50 outline-none focus:border-emerald-500"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-espresso-300 mb-1">
+                      Wholesale Price (₹) *
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={newProductForm.unitPrice}
+                      onChange={(e) => setNewProductForm({ ...newProductForm, unitPrice: e.target.value })}
+                      placeholder="1350"
+                      required
+                      className="w-full px-3.5 py-2.5 text-xs font-bold font-mono bg-black/50 border border-espresso-700 rounded-xl text-emerald-400 outline-none focus:border-emerald-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-espresso-300 mb-1">
+                      Unit (kg, ltr, pack)
+                    </label>
+                    <input
+                      type="text"
+                      value={newProductForm.unit}
+                      onChange={(e) => setNewProductForm({ ...newProductForm, unit: e.target.value })}
+                      placeholder="kg"
+                      required
+                      className="w-full px-3.5 py-2.5 text-xs font-bold bg-black/50 border border-espresso-700 rounded-xl text-cafe-50 outline-none focus:border-emerald-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-espresso-300 mb-1">
+                      Vendor SKU
+                    </label>
+                    <input
+                      type="text"
+                      value={newProductForm.sku}
+                      onChange={(e) => setNewProductForm({ ...newProductForm, sku: e.target.value })}
+                      placeholder="MCR-CLD-900"
+                      className="w-full px-3.5 py-2.5 text-xs font-mono font-bold bg-black/50 border border-espresso-700 rounded-xl text-cafe-50 outline-none focus:border-emerald-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-espresso-300 mb-1">
+                      Lead Time (Days)
+                    </label>
+                    <input
+                      type="number"
+                      value={newProductForm.leadTimeDays}
+                      onChange={(e) => setNewProductForm({ ...newProductForm, leadTimeDays: e.target.value })}
+                      placeholder="2"
+                      className="w-full px-3.5 py-2.5 text-xs font-bold bg-black/50 border border-espresso-700 rounded-xl text-cafe-50 outline-none focus:border-emerald-500"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-espresso-300 mb-1">
+                    Notes / Roasting Specification
+                  </label>
+                  <textarea
+                    value={newProductForm.notes}
+                    onChange={(e) => setNewProductForm({ ...newProductForm, notes: e.target.value })}
+                    rows="2"
+                    placeholder="e.g. Medium roast profile, nitrogen sealed 1kg valve bags."
+                    className="w-full px-3.5 py-2 text-xs bg-black/50 border border-espresso-700 rounded-xl text-cafe-50 outline-none focus:border-emerald-500"
+                  />
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsAddProductOpen(false)}
+                    className="px-3.5 py-2 rounded-xl text-xs font-bold text-espresso-400 hover:text-cafe-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSavingProduct}
+                    className="px-5 py-2 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 shadow-md transition-all disabled:opacity-50"
+                  >
+                    {isSavingProduct ? 'Saving...' : 'Add to Rate Card'}
+                  </button>
+                </div>
+              </form>
             </motion.div>
           </div>
         )}

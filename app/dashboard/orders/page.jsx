@@ -22,7 +22,6 @@ import {
 import { useDashboard } from '../layout';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { useToast } from '@/components/Toast';
-import PagePurposeBanner from '@/components/PagePurposeBanner';
 
 export default function PurchaseOrdersPage() {
   const toast = useToast();
@@ -162,35 +161,6 @@ export default function PurchaseOrdersPage() {
           )}
         </div>
       </div>
-
-      {/* Prominent Page Purpose Banner */}
-      <PagePurposeBanner
-        purpose="Complete lifecycle management for vendor procurement. Issue official purchase orders, monitor transit dispatches, and receive delivery parcels with instant stock incrementation."
-        badgeText="Orders & Deliveries Purpose"
-        accentColor="amber"
-        primaryAction={{
-          label: "+ Create New Order",
-          onClick: () => openCreatePo(),
-        }}
-        actions={[
-          {
-            title: "Issue Purchase Orders",
-            desc: "Pick a vendor to auto-populate low items, negotiate line item prices, and generate formal PO reference codes.",
-          },
-          {
-            title: "Track Dispatch Status",
-            desc: "Monitor which supplier shipments are in transit, expected arrival dates, and courier tracking details.",
-          },
-          {
-            title: "Receive Delivery",
-            desc: "When packages arrive at the café door, click 'Receive Delivery' to automatically credit inventory counts.",
-          },
-          {
-            title: "Historical PO Audit",
-            desc: "Download complete procurement histories, spending ledgers, and receiver sign-off logs as CSV.",
-          },
-        ]}
-      />
 
       {/* KPI Metric Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

@@ -32,7 +32,6 @@ import { REGISTERED_CAFES } from '@/services/seedData';
 import { useToast } from '@/components/Toast';
 import { useRouter } from 'next/navigation';
 import { deleteCafeAccountWithPassword } from '@/services/authService';
-import PagePurposeBanner from '@/components/PagePurposeBanner';
 
 export default function TeamPage() {
   const router = useRouter();
@@ -147,39 +146,6 @@ export default function TeamPage() {
           </div>
         )}
       </div>
-
-      {/* Prominent Page Purpose Banner */}
-      <PagePurposeBanner
-        purpose="Administrative team & floor access control. Only authorized Administrators can invite staff, grant managerial vs floor-only permissions, and distribute 4-digit quick-unlock PINs for café POS tablets."
-        badgeText="Staff & Permissions Purpose"
-        accentColor="caramel"
-        primaryAction={
-          !currentUser?.isStaff
-            ? {
-                label: "+ Add Staff Member",
-                onClick: openAddStaff,
-              }
-            : null
-        }
-        actions={[
-          {
-            title: "Admin Role Allocation",
-            desc: "Assign distinct roles: Store Admin, Assistant Manager, Head Barista, Floor Barista, or COGS Auditor.",
-          },
-          {
-            title: "4-Digit Floor PINs",
-            desc: "Issue secure PIN codes for staff to instantly authenticate on bar tablets without sharing master passwords.",
-          },
-          {
-            title: "Branch & Shift Rostering",
-            desc: "Assign team members to specific café branch locations and morning/evening operational shift rosters.",
-          },
-          {
-            title: "Status & Access Revocation",
-            desc: "Instantly toggle staff status (Active, On Leave, Suspended) to manage access rights immediately.",
-          },
-        ]}
-      />
 
       {/* KPI Overview Strip */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">

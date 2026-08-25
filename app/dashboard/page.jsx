@@ -28,7 +28,6 @@ import {
 import { useDashboard } from './layout';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { useToast } from '@/components/Toast';
-import PagePurposeBanner from '@/components/PagePurposeBanner';
 
 export default function DashboardOverviewPage() {
   const toast = useToast();
@@ -49,6 +48,15 @@ export default function DashboardOverviewPage() {
     role,
     currentUser,
   } = useDashboard();
+
+  const userRole = currentUser?.role || role || 'admin';
+  const canReorder = ['admin', 'manager', 'head_barista'].includes(userRole);
+  const canManageOrders = ['admin', 'manager', 'head_barista', 'barista'].includes(userRole);
+  const canManageVendors = ['admin', 'manager', 'head_barista'].includes(userRole);
+  const canManageTeam = ['admin', 'manager', 'head_barista'].includes(userRole);
+  const canManageCategories = ['admin', 'manager', 'head_barista'].includes(userRole);
+  const canViewAnalytics = ['admin', 'manager', 'auditor'].includes(userRole);
+  const canAddItem = ['admin', 'manager'].includes(userRole);
 
   const urgentItems = [...outOfStockItems, ...lowStockItems];
   const healthyCount = items.length - urgentItems.length;
@@ -90,7 +98,11 @@ export default function DashboardOverviewPage() {
             </span>
           </div>
           <p className="text-xs sm:text-sm text-espresso-600 dark:text-cafe-400 mt-1">
-            Executive operational overview of café stock levels, supplier shipments, and live store health.
+            {userRole === 'barista'
+              ? 'Shift workspace: check live ingredient stock, receive incoming supplier shipments, and log shift usage (-1).'
+              : userRole === 'auditor'
+              ? 'Auditing command center: monitor stock valuation, asset distribution, and complete activity history.'
+              : 'Executive operational overview of café stock levels, supplier shipments, and live store health.'}
           </p>
         </div>
 
@@ -105,145 +117,27 @@ export default function DashboardOverviewPage() {
 
           {urgentItems.length > 0 && (
             <Link
-              href="/dashboard/reorder"
+              href={canReorder ? '/dashboard/reorder' : '/dashboard/inventory?status=lowstock'}
               className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-800 hover:bg-amber-100 transition-all shadow-cafe-sm"
             >
               <AlertTriangle className="w-4 h-4 text-amber-600" />
-              <span>Reorder ({urgentItems.length})</span>
+              <span>{canReorder ? `Reorder (${urgentItems.length})` : `Shortages (${urgentItems.length})`}</span>
             </Link>
           )}
 
-          <button
-            onClick={openAddItem}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold text-white bg-gradient-to-r from-caramel-600 to-caramel-700 hover:from-caramel-500 hover:to-caramel-600 shadow-caramel-glow transition-all hover:scale-105 active:scale-95"
-          >
-            <Plus className="w-4 h-4" />
-            <span>+ Add New Item</span>
-          </button>
+          {canAddItem && (
+            <button
+              onClick={openAddItem}
+              className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold text-white bg-gradient-to-r from-caramel-600 to-caramel-700 hover:from-caramel-500 hover:to-caramel-600 shadow-caramel-glow transition-all hover:scale-105 active:scale-95"
+            >
+              <Plus className="w-4 h-4" />
+              <span>+ Add New Item</span>
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Prominent Page Purpose & Capabilities Banner */}
-      <PagePurposeBanner
-        purpose="Your high-level command center. Monitor overall stock health, track deliveries in transit, review urgent shortages, and follow daily operational workflows."
-        badgeText="Store Overview Purpose"
-        accentColor="caramel"
-        primaryAction={{
-          label: "View All Items",
-          onClick: () => {
-            window.location.href = '/dashboard/inventory';
-          },
-        }}
-        actions={[
-          {
-            title: "Live Store Health (₹)",
-            desc: "View working capital valuation, SKU counts, and healthy vs low stock breakdown at a glance.",
-          },
-          {
-            title: "Shortage Radar",
-            desc: "Instantly spot products that need replenishment and trigger 1-click restocks or supplier orders.",
-          },
-          {
-            title: "Shipment Tracking",
-            desc: "Monitor purchase orders dispatched by coffee roasters and dairy vendors in real time.",
-          },
-          {
-            title: "Quick Navigation Launchpad",
-            desc: "Jump directly into catalogue management, reorder planning, supplier portals, or staff accounts.",
-          },
-        ]}
-      />
 
-      {/* 5-Step Connected Operations Roadmap */}
-      <div className="p-5 sm:p-6 rounded-3xl bg-white dark:bg-[#140F0D] border border-cafe-200/80 dark:border-espresso-800 shadow-sm space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-caramel-500/20 text-caramel-600 dark:text-caramel-400 flex items-center justify-center">
-              <Sparkles className="w-4 h-4" />
-            </div>
-            <div>
-              <h3 className="text-xs sm:text-sm font-extrabold text-espresso-950 dark:text-cafe-50">
-                How CaféPulse Works (5 Easy Steps)
-              </h3>
-              <p className="text-[11px] text-espresso-500 dark:text-cafe-400">
-                Click any step to jump straight into that operational area:
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-5 gap-3">
-          <Link
-            href="/dashboard/inventory"
-            className="p-3.5 rounded-2xl bg-cafe-50/80 dark:bg-espresso-900/60 border border-cafe-200/80 dark:border-espresso-800 hover:border-caramel-500/60 hover:bg-caramel-500/5 transition-all group space-y-1.5"
-          >
-            <div className="flex items-center justify-between">
-              <span className="w-5 h-5 rounded-lg bg-caramel-600 text-white font-mono font-bold text-[10px] flex items-center justify-center">
-                1
-              </span>
-              <Package className="w-4 h-4 text-caramel-600 dark:text-caramel-400 group-hover:scale-110 transition-transform" />
-            </div>
-            <p className="text-xs font-bold text-espresso-950 dark:text-cafe-50">1. All Items</p>
-            <p className="text-[10px] text-espresso-500 dark:text-espresso-400 leading-tight">Catalogue, barcodes & tap -1 on shift.</p>
-          </Link>
-
-          <Link
-            href="/dashboard/vendors"
-            className="p-3.5 rounded-2xl bg-cafe-50/80 dark:bg-espresso-900/60 border border-cafe-200/80 dark:border-espresso-800 hover:border-caramel-500/60 hover:bg-caramel-500/5 transition-all group space-y-1.5"
-          >
-            <div className="flex items-center justify-between">
-              <span className="w-5 h-5 rounded-lg bg-caramel-600 text-white font-mono font-bold text-[10px] flex items-center justify-center">
-                2
-              </span>
-              <Building className="w-4 h-4 text-caramel-600 dark:text-caramel-400 group-hover:scale-110 transition-transform" />
-            </div>
-            <p className="text-xs font-bold text-espresso-950 dark:text-cafe-50">2. Suppliers</p>
-            <p className="text-[10px] text-espresso-500 dark:text-espresso-400 leading-tight">Connect vendors & wholesale price books.</p>
-          </Link>
-
-          <Link
-            href="/dashboard/reorder"
-            className="p-3.5 rounded-2xl bg-cafe-50/80 dark:bg-espresso-900/60 border border-cafe-200/80 dark:border-espresso-800 hover:border-caramel-500/60 hover:bg-caramel-500/5 transition-all group space-y-1.5"
-          >
-            <div className="flex items-center justify-between">
-              <span className="w-5 h-5 rounded-lg bg-caramel-600 text-white font-mono font-bold text-[10px] flex items-center justify-center">
-                3
-              </span>
-              <RefreshCw className="w-4 h-4 text-caramel-600 dark:text-caramel-400 group-hover:scale-110 transition-transform" />
-            </div>
-            <p className="text-xs font-bold text-espresso-950 dark:text-cafe-50">3. Low Stock</p>
-            <p className="text-[10px] text-espresso-500 dark:text-espresso-400 leading-tight">Automated deficit calculation & PAR replenishment.</p>
-          </Link>
-
-          <Link
-            href="/dashboard/orders"
-            className="p-3.5 rounded-2xl bg-cafe-50/80 dark:bg-espresso-900/60 border border-cafe-200/80 dark:border-espresso-800 hover:border-caramel-500/60 hover:bg-caramel-500/5 transition-all group space-y-1.5"
-          >
-            <div className="flex items-center justify-between">
-              <span className="w-5 h-5 rounded-lg bg-caramel-600 text-white font-mono font-bold text-[10px] flex items-center justify-center">
-                4
-              </span>
-              <Truck className="w-4 h-4 text-caramel-600 dark:text-caramel-400 group-hover:scale-110 transition-transform" />
-            </div>
-            <p className="text-xs font-bold text-espresso-950 dark:text-cafe-50">4. Send Orders</p>
-            <p className="text-[10px] text-espresso-500 dark:text-espresso-400 leading-tight">Create & issue purchase orders to suppliers.</p>
-          </Link>
-
-          <Link
-            href="/dashboard/orders"
-            className="p-3.5 rounded-2xl bg-cafe-50/80 dark:bg-espresso-900/60 border border-cafe-200/80 dark:border-espresso-800 hover:border-caramel-500/60 hover:bg-caramel-500/5 transition-all group space-y-1.5"
-          >
-            <div className="flex items-center justify-between">
-              <span className="w-5 h-5 rounded-lg bg-emerald-600 text-white font-mono font-bold text-[10px] flex items-center justify-center">
-                5
-              </span>
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 group-hover:scale-110 transition-transform" />
-            </div>
-            <p className="text-xs font-bold text-espresso-950 dark:text-cafe-50">5. Receive Goods</p>
-            <p className="text-[10px] text-espresso-500 dark:text-espresso-400 leading-tight">Check in delivered boxes to auto-update stock.</p>
-          </Link>
-        </div>
-      </div>
 
       {/* 4 Core Executive Metric Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -290,7 +184,7 @@ export default function DashboardOverviewPage() {
 
         {/* Urgent Shortages */}
         <Link
-          href="/dashboard/reorder"
+          href={canReorder ? '/dashboard/reorder' : '/dashboard/inventory?status=lowstock'}
           className="p-5 rounded-3xl bg-white dark:bg-[#181310] border border-cafe-200/80 dark:border-espresso-800 shadow-cafe-sm space-y-3 hover:border-amber-400 dark:hover:border-amber-600 transition-all group block"
         >
           <div className="flex items-center justify-between">
@@ -356,10 +250,10 @@ export default function DashboardOverviewPage() {
               </div>
 
               <Link
-                href="/dashboard/reorder"
+                href={canReorder ? '/dashboard/reorder' : '/dashboard/inventory?status=lowstock'}
                 className="text-xs font-bold text-caramel-600 dark:text-caramel-400 hover:text-caramel-700 flex items-center gap-1 group"
               >
-                <span>Reorder Planner</span>
+                <span>{canReorder ? 'Reorder Planner' : 'View in Catalogue'}</span>
                 <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" />
               </Link>
             </div>
@@ -424,10 +318,10 @@ export default function DashboardOverviewPage() {
               {urgentItems.length} total shortage alerts
             </span>
             <Link
-              href="/dashboard/reorder"
+              href={canReorder ? '/dashboard/reorder' : '/dashboard/inventory?status=lowstock'}
               className="font-bold text-caramel-600 dark:text-caramel-400 hover:underline"
             >
-              Open Automated Planner &rarr;
+              {canReorder ? 'Open Automated Planner \u2192' : 'View Low Stock Items \u2192'}
             </Link>
           </div>
         </div>
@@ -512,7 +406,9 @@ export default function DashboardOverviewPage() {
               href="/dashboard/orders"
               className="font-bold text-caramel-600 dark:text-caramel-400 hover:underline"
             >
-              Issue New Purchase Order &rarr;
+              {['admin', 'manager', 'head_barista'].includes(userRole)
+                ? 'Issue New Purchase Order \u2192'
+                : 'Receive Deliveries & Check Boxes \u2192'}
             </Link>
           </div>
         </div>
@@ -537,13 +433,27 @@ export default function DashboardOverviewPage() {
               </div>
             </div>
 
-            <Link
-              href="/dashboard/categories"
-              className="text-xs font-bold text-caramel-600 dark:text-caramel-400 hover:text-caramel-700 flex items-center gap-1 group"
-            >
-              <span>Manage ({categories.length})</span>
-              <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" />
-            </Link>
+            {canManageCategories ? (
+              <Link
+                href="/dashboard/categories"
+                className="text-xs font-bold text-caramel-600 dark:text-caramel-400 hover:text-caramel-700 flex items-center gap-1 group"
+              >
+                <span>Manage ({categories.length})</span>
+                <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" />
+              </Link>
+            ) : canViewAnalytics ? (
+              <Link
+                href="/dashboard/analytics"
+                className="text-xs font-bold text-caramel-600 dark:text-caramel-400 hover:text-caramel-700 flex items-center gap-1 group"
+              >
+                <span>Analytics</span>
+                <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" />
+              </Link>
+            ) : (
+              <span className="text-[11px] font-bold text-espresso-400">
+                {categories.length} Categories
+              </span>
+            )}
           </div>
 
           <div className="space-y-3">
@@ -635,75 +545,222 @@ export default function DashboardOverviewPage() {
         </div>
       </div>
 
-      {/* 4 Dedicated Quick Navigation Launchers */}
+      {/* 4 Dedicated Quick Navigation Launchers (Tailored to Role) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-2">
-        <Link
-          href="/dashboard/inventory"
-          className="p-4 rounded-2xl bg-white dark:bg-[#181310] border border-cafe-200/80 dark:border-espresso-800 shadow-cafe-sm hover:border-caramel-500 dark:hover:border-caramel-600 hover:shadow-cafe-md transition-all group flex items-start gap-3"
-        >
-          <div className="w-10 h-10 rounded-xl bg-caramel-100 dark:bg-caramel-950/60 text-caramel-700 dark:text-caramel-300 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-            <Package className="w-5 h-5" />
-          </div>
-          <div className="min-w-0">
-            <p className="text-xs font-bold text-espresso-950 dark:text-cafe-50 group-hover:text-caramel-600 dark:group-hover:text-caramel-400 transition-colors">
-              All Items & Stock
-            </p>
-            <p className="text-[10px] text-espresso-500 dark:text-cafe-400 mt-0.5">
-              Full catalogue, barcodes, and shift usage (-1) &rarr;
-            </p>
-          </div>
-        </Link>
+        {userRole === 'barista' ? (
+          /* Barista Launchers */
+          <>
+            <Link
+              href="/dashboard/inventory"
+              className="p-4 rounded-2xl bg-white dark:bg-[#181310] border border-cafe-200/80 dark:border-espresso-800 shadow-cafe-sm hover:border-caramel-500 dark:hover:border-caramel-600 hover:shadow-cafe-md transition-all group flex items-start gap-3"
+            >
+              <div className="w-10 h-10 rounded-xl bg-caramel-100 dark:bg-caramel-950/60 text-caramel-700 dark:text-caramel-300 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                <Package className="w-5 h-5" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-bold text-espresso-950 dark:text-cafe-50 group-hover:text-caramel-600 dark:group-hover:text-caramel-400 transition-colors">
+                  All Items & Stock
+                </p>
+                <p className="text-[10px] text-espresso-500 dark:text-cafe-400 mt-0.5">
+                  Full catalogue, barcodes, and shift usage (-1) &rarr;
+                </p>
+              </div>
+            </Link>
 
-        <Link
-          href="/dashboard/reorder"
-          className="p-4 rounded-2xl bg-white dark:bg-[#181310] border border-cafe-200/80 dark:border-espresso-800 shadow-cafe-sm hover:border-amber-500 dark:hover:border-amber-600 hover:shadow-cafe-md transition-all group flex items-start gap-3"
-        >
-          <div className="w-10 h-10 rounded-xl bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-            <RefreshCw className="w-5 h-5" />
-          </div>
-          <div className="min-w-0">
-            <p className="text-xs font-bold text-espresso-950 dark:text-cafe-50 group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors">
-              Low Stock & Reorder
-            </p>
-            <p className="text-[10px] text-espresso-500 dark:text-cafe-400 mt-0.5">
-              Calculate exact PAR deficits and order low stock &rarr;
-            </p>
-          </div>
-        </Link>
+            <Link
+              href="/dashboard/inventory"
+              className="p-4 rounded-2xl bg-white dark:bg-[#181310] border border-cafe-200/80 dark:border-espresso-800 shadow-cafe-sm hover:border-amber-500 dark:hover:border-amber-600 hover:shadow-cafe-md transition-all group flex items-start gap-3"
+            >
+              <div className="w-10 h-10 rounded-xl bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                <Coffee className="w-5 h-5" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-bold text-espresso-950 dark:text-cafe-50 group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors">
+                  Floor POS Stepper (-1)
+                </p>
+                <p className="text-[10px] text-espresso-500 dark:text-cafe-400 mt-0.5">
+                  Rapid single-tap deductions during rush hours &rarr;
+                </p>
+              </div>
+            </Link>
 
-        <Link
-          href="/dashboard/vendors"
-          className="p-4 rounded-2xl bg-white dark:bg-[#181310] border border-cafe-200/80 dark:border-espresso-800 shadow-cafe-sm hover:border-emerald-500 dark:hover:border-emerald-600 hover:shadow-cafe-md transition-all group flex items-start gap-3"
-        >
-          <div className="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-            <Building className="w-5 h-5" />
-          </div>
-          <div className="min-w-0">
-            <p className="text-xs font-bold text-espresso-950 dark:text-cafe-50 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
-              Suppliers & Quotes
-            </p>
-            <p className="text-[10px] text-espresso-500 dark:text-cafe-400 mt-0.5">
-              Wholesale agreements and roastery proposals &rarr;
-            </p>
-          </div>
-        </Link>
+            <Link
+              href="/dashboard/orders"
+              className="p-4 rounded-2xl bg-white dark:bg-[#181310] border border-cafe-200/80 dark:border-espresso-800 shadow-cafe-sm hover:border-blue-500 dark:hover:border-blue-600 hover:shadow-cafe-md transition-all group flex items-start gap-3"
+            >
+              <div className="w-10 h-10 rounded-xl bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                <Truck className="w-5 h-5" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-bold text-espresso-950 dark:text-cafe-50 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                  Orders & Deliveries
+                </p>
+                <p className="text-[10px] text-espresso-500 dark:text-cafe-400 mt-0.5">
+                  Receive delivered supplier boxes into stock &rarr;
+                </p>
+              </div>
+            </Link>
 
-        <Link
-          href="/dashboard/team"
-          className="p-4 rounded-2xl bg-white dark:bg-[#181310] border border-cafe-200/80 dark:border-espresso-800 shadow-cafe-sm hover:border-blue-500 dark:hover:border-blue-600 hover:shadow-cafe-md transition-all group flex items-start gap-3"
-        >
-          <div className="w-10 h-10 rounded-xl bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-            <Users className="w-5 h-5" />
-          </div>
-          <div className="min-w-0">
-            <p className="text-xs font-bold text-espresso-950 dark:text-cafe-50 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
-              Staff & PINs
-            </p>
-            <p className="text-[10px] text-espresso-500 dark:text-cafe-400 mt-0.5">
-              Barista accounts, 4-digit floor PINs & roles &rarr;
-            </p>
-          </div>
-        </Link>
+            <Link
+              href="/dashboard/history"
+              className="p-4 rounded-2xl bg-white dark:bg-[#181310] border border-cafe-200/80 dark:border-espresso-800 shadow-cafe-sm hover:border-emerald-500 dark:hover:border-emerald-600 hover:shadow-cafe-md transition-all group flex items-start gap-3"
+            >
+              <div className="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                <Clock className="w-5 h-5" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-bold text-espresso-950 dark:text-cafe-50 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
+                  Shift History Ledger
+                </p>
+                <p className="text-[10px] text-espresso-500 dark:text-cafe-400 mt-0.5">
+                  Review logged shift deductions & timestamps &rarr;
+                </p>
+              </div>
+            </Link>
+          </>
+        ) : userRole === 'auditor' ? (
+          /* Auditor Launchers */
+          <>
+            <Link
+              href="/dashboard/inventory"
+              className="p-4 rounded-2xl bg-white dark:bg-[#181310] border border-cafe-200/80 dark:border-espresso-800 shadow-cafe-sm hover:border-caramel-500 dark:hover:border-caramel-600 hover:shadow-cafe-md transition-all group flex items-start gap-3"
+            >
+              <div className="w-10 h-10 rounded-xl bg-caramel-100 dark:bg-caramel-950/60 text-caramel-700 dark:text-caramel-300 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                <Package className="w-5 h-5" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-bold text-espresso-950 dark:text-cafe-50 group-hover:text-caramel-600 dark:group-hover:text-caramel-400 transition-colors">
+                  All Items & Catalogue
+                </p>
+                <p className="text-[10px] text-espresso-500 dark:text-cafe-400 mt-0.5">
+                  Inspect stock counts, SKUs, and unit rates &rarr;
+                </p>
+              </div>
+            </Link>
+
+            <Link
+              href="/dashboard/analytics"
+              className="p-4 rounded-2xl bg-white dark:bg-[#181310] border border-cafe-200/80 dark:border-espresso-800 shadow-cafe-sm hover:border-purple-500 dark:hover:border-purple-600 hover:shadow-cafe-md transition-all group flex items-start gap-3"
+            >
+              <div className="w-10 h-10 rounded-xl bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                <BarChart3 className="w-5 h-5" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-bold text-espresso-950 dark:text-cafe-50 group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors">
+                  Stock Value & Costs (₹)
+                </p>
+                <p className="text-[10px] text-espresso-500 dark:text-cafe-400 mt-0.5">
+                  Total capital valuation & category cost ratios &rarr;
+                </p>
+              </div>
+            </Link>
+
+            <Link
+              href="/dashboard/analytics"
+              className="p-4 rounded-2xl bg-white dark:bg-[#181310] border border-cafe-200/80 dark:border-espresso-800 shadow-cafe-sm hover:border-emerald-500 dark:hover:border-emerald-600 hover:shadow-cafe-md transition-all group flex items-start gap-3"
+            >
+              <div className="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                <Layers className="w-5 h-5" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-bold text-espresso-950 dark:text-cafe-50 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
+                  Department Asset Share
+                </p>
+                <p className="text-[10px] text-espresso-500 dark:text-cafe-400 mt-0.5">
+                  Audit {categories.length} departments and ingredient investment &rarr;
+                </p>
+              </div>
+            </Link>
+
+            <Link
+              href="/dashboard/history"
+              className="p-4 rounded-2xl bg-white dark:bg-[#181310] border border-cafe-200/80 dark:border-espresso-800 shadow-cafe-sm hover:border-blue-500 dark:hover:border-blue-600 hover:shadow-cafe-md transition-all group flex items-start gap-3"
+            >
+              <div className="w-10 h-10 rounded-xl bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                <Clock className="w-5 h-5" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-bold text-espresso-950 dark:text-cafe-50 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                  Download Activity (CSV)
+                </p>
+                <p className="text-[10px] text-espresso-500 dark:text-cafe-400 mt-0.5">
+                  Full historical ledger of restocks, usage & goods &rarr;
+                </p>
+              </div>
+            </Link>
+          </>
+        ) : (
+          /* Standard Launchers for Admin / Manager / Head Barista */
+          <>
+            <Link
+              href="/dashboard/inventory"
+              className="p-4 rounded-2xl bg-white dark:bg-[#181310] border border-cafe-200/80 dark:border-espresso-800 shadow-cafe-sm hover:border-caramel-500 dark:hover:border-caramel-600 hover:shadow-cafe-md transition-all group flex items-start gap-3"
+            >
+              <div className="w-10 h-10 rounded-xl bg-caramel-100 dark:bg-caramel-950/60 text-caramel-700 dark:text-caramel-300 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                <Package className="w-5 h-5" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-bold text-espresso-950 dark:text-cafe-50 group-hover:text-caramel-600 dark:group-hover:text-caramel-400 transition-colors">
+                  All Items & Stock
+                </p>
+                <p className="text-[10px] text-espresso-500 dark:text-cafe-400 mt-0.5">
+                  Full catalogue, barcodes, and shift usage (-1) &rarr;
+                </p>
+              </div>
+            </Link>
+
+            <Link
+              href="/dashboard/reorder"
+              className="p-4 rounded-2xl bg-white dark:bg-[#181310] border border-cafe-200/80 dark:border-espresso-800 shadow-cafe-sm hover:border-amber-500 dark:hover:border-amber-600 hover:shadow-cafe-md transition-all group flex items-start gap-3"
+            >
+              <div className="w-10 h-10 rounded-xl bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                <RefreshCw className="w-5 h-5" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-bold text-espresso-950 dark:text-cafe-50 group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors">
+                  Low Stock & Reorder
+                </p>
+                <p className="text-[10px] text-espresso-500 dark:text-cafe-400 mt-0.5">
+                  Calculate exact PAR deficits and order low stock &rarr;
+                </p>
+              </div>
+            </Link>
+
+            <Link
+              href="/dashboard/vendors"
+              className="p-4 rounded-2xl bg-white dark:bg-[#181310] border border-cafe-200/80 dark:border-espresso-800 shadow-cafe-sm hover:border-emerald-500 dark:hover:border-emerald-600 hover:shadow-cafe-md transition-all group flex items-start gap-3"
+            >
+              <div className="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                <Building className="w-5 h-5" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-bold text-espresso-950 dark:text-cafe-50 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
+                  Suppliers & Quotes
+                </p>
+                <p className="text-[10px] text-espresso-500 dark:text-cafe-400 mt-0.5">
+                  Wholesale agreements and roastery proposals &rarr;
+                </p>
+              </div>
+            </Link>
+
+            <Link
+              href={canManageTeam ? '/dashboard/team' : '/dashboard/history'}
+              className="p-4 rounded-2xl bg-white dark:bg-[#181310] border border-cafe-200/80 dark:border-espresso-800 shadow-cafe-sm hover:border-blue-500 dark:hover:border-blue-600 hover:shadow-cafe-md transition-all group flex items-start gap-3"
+            >
+              <div className="w-10 h-10 rounded-xl bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                <Users className="w-5 h-5" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-bold text-espresso-950 dark:text-cafe-50 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                  Staff & PINs
+                </p>
+                <p className="text-[10px] text-espresso-500 dark:text-cafe-400 mt-0.5">
+                  Barista accounts, 4-digit floor PINs & roles &rarr;
+                </p>
+              </div>
+            </Link>
+          </>
+        )}
       </div>
     </div>
   );

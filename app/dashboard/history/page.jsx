@@ -27,11 +27,10 @@ import {
 import { useDashboard } from '../layout';
 import { formatDate, formatCurrency } from '@/lib/utils';
 import { useToast } from '@/components/Toast';
-import PagePurposeBanner from '@/components/PagePurposeBanner';
 
 export default function HistoryAuditPage() {
   const toast = useToast();
-  const { activityLogs, items, currentUser } = useDashboard();
+  const { activityLogs, items, currentUser, role } = useDashboard();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedType, setSelectedType] = useState('ALL'); // 'ALL' | 'RESTOCKED' | 'QUANTITY_ADJUSTED' | 'CREATED' | 'UPDATED' | 'DELETED'
@@ -176,35 +175,6 @@ export default function HistoryAuditPage() {
           <span>Download Activity (CSV)</span>
         </button>
       </div>
-
-      {/* Prominent Page Purpose Banner */}
-      <PagePurposeBanner
-        purpose="Tamper-evident audit compliance. Every time a barista taps -1, adjusts stock, or edits a supplier price, an uneditable log is registered here with the user name and exact timestamp."
-        badgeText="Audit & History Purpose"
-        accentColor="blue"
-        primaryAction={{
-          label: "Download Activity (CSV)",
-          onClick: handleExportHistoryCsv,
-        }}
-        actions={[
-          {
-            title: "Automated Event Logging",
-            desc: "Tracks 5 discrete event classes: Stock Replenishment, Shift Usage, Product Creation, Edits, and Deletions.",
-          },
-          {
-            title: "Staff Attribution",
-            desc: "Identifies exactly which manager, barista, or auditor performed each action along with their branch location.",
-          },
-          {
-            title: "Time & Event Filtering",
-            desc: "Filter logs by Today, Past Week, or Past 30 Days to quickly audit specific shifts or monthly reconciliations.",
-          },
-          {
-            title: "Auditor CSV Export",
-            desc: "Export complete timestamped activity reports directly to Excel/CSV for accounting records and audit reviews.",
-          },
-        ]}
-      />
 
       {/* KPI Metric Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -394,9 +364,8 @@ export default function HistoryAuditPage() {
           </div>
           <ArrowRight className="w-4 h-4 text-espresso-400 group-hover:translate-x-1 transition-transform" />
         </Link>
-
         <Link
-          href="/dashboard/analytics"
+          href={['admin', 'manager', 'auditor'].includes(currentUser?.role || role) ? '/dashboard/analytics' : '/dashboard'}
           className="p-4 rounded-2xl bg-white dark:bg-[#181310] border border-cafe-200/80 dark:border-espresso-800 shadow-cafe-sm hover:border-emerald-500 transition-all flex items-center justify-between group"
         >
           <div className="flex items-center gap-3">
@@ -405,10 +374,14 @@ export default function HistoryAuditPage() {
             </div>
             <div>
               <p className="text-xs font-bold text-espresso-950 dark:text-cafe-50 group-hover:text-emerald-600 transition-colors">
-                View Financial & Valuation Charts?
+                {['admin', 'manager', 'auditor'].includes(currentUser?.role || role)
+                  ? 'View Financial & Valuation Charts?'
+                  : 'Return to Store Overview?'}
               </p>
               <p className="text-[10px] text-espresso-500 dark:text-cafe-400">
-                Go to Stock Value & Costs &rarr;
+                {['admin', 'manager', 'auditor'].includes(currentUser?.role || role)
+                  ? 'Go to Stock Value & Costs →'
+                  : 'Go to Main Store Overview →'}
               </p>
             </div>
           </div>

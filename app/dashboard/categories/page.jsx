@@ -22,7 +22,6 @@ import {
 import { useDashboard } from '../layout';
 import { formatCurrency, formatNumber } from '@/lib/utils';
 import Link from 'next/link';
-import PagePurposeBanner from '@/components/PagePurposeBanner';
 
 const ICON_COMPONENTS = {
   Coffee,
@@ -66,35 +65,6 @@ export default function CategoriesPage() {
           <span>+ Add Category</span>
         </button>
       </div>
-
-      {/* Prominent Page Purpose Banner */}
-      <PagePurposeBanner
-        purpose="Departmental taxonomy management. Group your inventory into logical departments (Coffee, Dairy, Syrups, Bakery, Packaging) to maintain clean reporting and track department asset valuations."
-        badgeText="Categories Purpose"
-        accentColor="purple"
-        primaryAction={{
-          label: "+ Add Category",
-          onClick: openAddCategory,
-        }}
-        actions={[
-          {
-            title: "Create Custom Sections",
-            desc: "Define departments like Specialty Coffee, Dairy, Syrups, Bakery, or Eco-Packaging with custom icons.",
-          },
-          {
-            title: "Auto SKU Generation",
-            desc: "New catalogue items assigned to a category automatically inherit clean prefix codes (e.g. COF-01, MLK-02).",
-          },
-          {
-            title: "Section Asset Value (₹)",
-            desc: "Each card computes the exact rupee valuation and active item count stored in that department.",
-          },
-          {
-            title: "Safe Re-assignment",
-            desc: "Edit names and icons anytime, or delete categories with automatic item reallocation safeguards.",
-          },
-        ]}
-      />
 
       {/* Categories Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">

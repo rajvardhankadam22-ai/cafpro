@@ -23,7 +23,6 @@ import Link from 'next/link';
 import { useDashboard } from '../layout';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { useToast } from '@/components/Toast';
-import PagePurposeBanner from '@/components/PagePurposeBanner';
 
 export default function ReorderReplenishmentPage() {
   const toast = useToast();
@@ -101,39 +100,6 @@ export default function ReorderReplenishmentPage() {
           )}
         </div>
       </div>
-
-      {/* Prominent Page Purpose Banner */}
-      <PagePurposeBanner
-        purpose="Prevent stockouts and rush emergencies. Automatically scans your catalogue against safety PAR levels, shows calculated restocking deficits, and prepares supplier POs in 1-click."
-        badgeText="Reorder Planner Purpose"
-        accentColor="amber"
-        primaryAction={
-          urgentItems.length > 0
-            ? {
-                label: `Order All Low Items (${urgentItems.length})`,
-                onClick: handleCreatePoForShortages,
-              }
-            : null
-        }
-        actions={[
-          {
-            title: "Live Shortage Detection",
-            desc: "Items automatically appear here the instant their on-hand count drops below their reorder threshold.",
-          },
-          {
-            title: "Smart PAR Calculation",
-            desc: "Calculates the exact units needed to refill shelves back to full capacity (PAR Level - Current Stock).",
-          },
-          {
-            title: "1-Click Bulk PO Generation",
-            desc: "Click 'Order All Low Items' to automatically group shortages into purchase orders for designated suppliers.",
-          },
-          {
-            title: "Emergency Quick Restock",
-            desc: "Tap 'Direct Restock' on individual rows to instantly increment counts if you bought stock locally.",
-          },
-        ]}
-      />
 
       {/* Summary KPI Banner */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

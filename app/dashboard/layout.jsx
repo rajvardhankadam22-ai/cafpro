@@ -1,8 +1,10 @@
 'use client';
 
 import React, { useState, useEffect, createContext, useContext } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
+import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Lock, ArrowRight, ShieldAlert } from 'lucide-react';
 import Sidebar from '@/components/Sidebar';
 import Header from '@/components/Header';
 import ItemModal from '@/components/ItemModal';
@@ -44,6 +46,53 @@ import {
   toggleStaffStatus,
 } from '@/services/inventoryService';
 import { subscribeToAuth, logoutUser } from '@/services/authService';
+
+const ROLE_ALLOWED_ROUTES = {
+  admin: [
+    '/dashboard',
+    '/dashboard/inventory',
+    '/dashboard/reorder',
+    '/dashboard/orders',
+    '/dashboard/vendors',
+    '/dashboard/categories',
+    '/dashboard/analytics',
+    '/dashboard/history',
+    '/dashboard/team',
+  ],
+  manager: [
+    '/dashboard',
+    '/dashboard/inventory',
+    '/dashboard/reorder',
+    '/dashboard/orders',
+    '/dashboard/vendors',
+    '/dashboard/categories',
+    '/dashboard/analytics',
+    '/dashboard/history',
+    '/dashboard/team',
+  ],
+  head_barista: [
+    '/dashboard',
+    '/dashboard/inventory',
+    '/dashboard/reorder',
+    '/dashboard/orders',
+    '/dashboard/categories',
+    '/dashboard/vendors',
+    '/dashboard/history',
+    '/dashboard/team',
+  ],
+  barista: [
+    '/dashboard',
+    '/dashboard/inventory',
+    '/dashboard/orders',
+    '/dashboard/history',
+  ],
+  auditor: [
+    '/dashboard',
+    '/dashboard/inventory',
+    '/dashboard/analytics',
+    '/dashboard/history',
+  ],
+};
 
 const DashboardContext = createContext(null);
 
@@ -599,6 +648,11 @@ export default function DashboardLayout({ children }) {
     toggleStaffStatus: handleToggleStaffStatus,
   };
 
+  const pathname = usePathname();
+  const userRole = currentUser?.role || role || 'admin';
+  const allowedRoutes = ROLE_ALLOWED_ROUTES[userRole] || ROLE_ALLOWED_ROUTES.admin;
+  const isCurrentRouteAllowed = !pathname || allowedRoutes.some((r) => pathname === r || pathname.startsWith(r + '/'));
+
   return (
     <DashboardContext.Provider value={contextValue}>
       <div className="min-h-screen bg-cafe-50 dark:bg-[#0F0C0A] flex flex-col lg:flex-row transition-colors">
@@ -634,7 +688,73 @@ export default function DashboardLayout({ children }) {
           />
 
           <main className="flex-1 p-4 sm:p-8 max-w-7xl w-full mx-auto space-y-8 animate-pageFadeIn">
-            {children}
+            {isCurrentRouteAllowed ? (
+              children
+            ) : (
+              <div className="p-8 sm:p-12 rounded-3xl bg-white dark:bg-[#181310] border border-amber-300/80 dark:border-amber-800/60 shadow-cafe-md text-center max-w-xl mx-auto space-y-5 my-8">
+                <div className="w-16 h-16 rounded-3xl bg-amber-100 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 flex items-center justify-center mx-auto border border-amber-200 dark:border-amber-800 shadow-sm">
+                  <Lock className="w-8 h-8" />
+                </div>
+                <div className="space-y-2">
+                  <span className="px-3 py-1 rounded-full text-xs font-bold bg-amber-100 dark:bg-amber-950 text-amber-900 dark:text-amber-300 border border-amber-300">
+                    Role Access Control
+                  </span>
+                  <h2 className="text-xl sm:text-2xl font-extrabold text-espresso-950 dark:text-cafe-50 tracking-tight">
+                    Restricted Area for Your Role
+                  </h2>
+                  <p className="text-xs sm:text-sm text-espresso-600 dark:text-cafe-400 leading-relaxed max-w-md mx-auto">
+                    You are currently signed in as <strong className="text-espresso-950 dark:text-cafe-100">{currentUser?.displayName || 'Staff Member'}</strong> with role <strong className="text-caramel-600 dark:text-caramel-400">"{currentUser?.roleLabel || userRole}"</strong>. This section is restricted to authorized roles.
+                  </p>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-cafe-50 dark:bg-espresso-900/60 border border-cafe-200 dark:border-espresso-800 text-left space-y-2">
+                  <p className="text-[11px] font-bold uppercase text-espresso-500 dark:text-cafe-400">
+                    Permitted Pages for Your Role:
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {allowedRoutes.map((r) => {
+                      const name =
+                        r === '/dashboard'
+                          ? 'Store Overview'
+                          : r === '/dashboard/inventory'
+                          ? 'All Items & Stock'
+                          : r === '/dashboard/analytics'
+                          ? 'Stock Valuation & Costs'
+                          : r === '/dashboard/history'
+                          ? 'History & Audit Logs'
+                          : r === '/dashboard/reorder'
+                          ? 'Low Stock & Reorder'
+                          : r === '/dashboard/orders'
+                          ? 'Orders & Deliveries'
+                          : r === '/dashboard/vendors'
+                          ? 'Suppliers & Quotes'
+                          : r === '/dashboard/categories'
+                          ? 'Categories'
+                          : 'Staff & PINs';
+                      return (
+                        <Link
+                          key={r}
+                          href={r}
+                          className="px-3 py-1.5 rounded-xl text-xs font-bold bg-white dark:bg-espresso-800 text-caramel-700 dark:text-caramel-300 border border-cafe-200 dark:border-espresso-700 hover:border-caramel-500 shadow-xs transition-all"
+                        >
+                          {name} &rarr;
+                        </Link>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="pt-2">
+                  <Link
+                    href="/dashboard/inventory"
+                    className="inline-flex items-center gap-2 px-6 py-3 rounded-2xl font-bold text-xs text-white bg-gradient-to-r from-caramel-600 to-caramel-700 hover:from-caramel-500 hover:to-caramel-600 shadow-caramel-glow transition-all active:scale-95"
+                  >
+                    <span>Go to Accessible Inventory Workspace</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </Link>
+                </div>
+              </div>
+            )}
           </main>
         </div>
 
@@ -661,6 +781,7 @@ export default function DashboardLayout({ children }) {
           onClose={() => setIsRestockModalOpen(false)}
           item={itemToRestock}
           onRestock={handleConfirmRestock}
+          activityLogs={activityLogs}
         />
 
         <CategoryModal

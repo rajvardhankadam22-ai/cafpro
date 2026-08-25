@@ -18,10 +18,9 @@ import {
 } from 'lucide-react';
 import { useDashboard } from '../layout';
 import { formatCurrency, formatNumber, formatDate } from '@/lib/utils';
-import PagePurposeBanner from '@/components/PagePurposeBanner';
 
 export default function AnalyticsPage() {
-  const { items, categories, activityLogs, totalValuation, lowStockItems, outOfStockItems } =
+  const { items, categories, activityLogs, totalValuation, lowStockItems, outOfStockItems, role, currentUser } =
     useDashboard();
 
   const healthyItemsCount = items.length - lowStockItems.length - outOfStockItems.length;
@@ -69,31 +68,6 @@ export default function AnalyticsPage() {
           Financial valuation, COGS breakdowns, inventory health ratios, and high-value stock intelligence.
         </p>
       </div>
-
-      {/* Prominent Page Purpose Banner */}
-      <PagePurposeBanner
-        purpose="Executive financial analytics. Track the total capital locked inside your storage room (₹), identify your 5 most expensive ingredients, and analyze category cost concentrations to minimize spoilage."
-        badgeText="Analytics & Value Purpose"
-        accentColor="emerald"
-        actions={[
-          {
-            title: "Catalogue Health Ratio",
-            desc: "Visual tri-color bar indicating the percentage of your stock that is healthy vs low vs critically out of stock.",
-          },
-          {
-            title: "Total Capital Valuation (₹)",
-            desc: "Calculates the real-time monetary value of all current on-hand quantities based on verified unit purchase prices.",
-          },
-          {
-            title: "Top 5 High-Value Assets",
-            desc: "Ranks your most capital-intensive ingredients (e.g. Arabica beans, flavored syrups) to prioritize secure storage.",
-          },
-          {
-            title: "Category Cost Concentration",
-            desc: "Shows exactly what percentage of your store's total working capital is tied up in each department.",
-          },
-        ]}
-      />
 
       {/* Stock Health & Valuation Distribution Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -273,10 +247,10 @@ export default function AnalyticsPage() {
               </h3>
             </div>
             <Link
-              href="/dashboard/reorder"
+              href={['admin', 'manager', 'head_barista'].includes(currentUser?.role || role) ? '/dashboard/reorder' : '/dashboard/inventory?status=lowstock'}
               className="text-xs font-bold text-caramel-600 dark:text-caramel-400 hover:underline flex items-center gap-1"
             >
-              <span>Reorder Planner</span>
+              <span>{['admin', 'manager', 'head_barista'].includes(currentUser?.role || role) ? 'Reorder Planner' : 'View Low Stock'}</span>
               <ArrowRight className="w-3 h-3" />
             </Link>
           </div>
@@ -305,10 +279,10 @@ export default function AnalyticsPage() {
                 </p>
               </div>
               <Link
-                href="/dashboard/categories"
+                href={['admin', 'manager', 'head_barista'].includes(currentUser?.role || role) ? '/dashboard/categories' : '/dashboard/inventory'}
                 className="font-bold text-caramel-600 dark:text-caramel-400 hover:underline text-xs"
               >
-                View Categories &rarr;
+                {['admin', 'manager', 'head_barista'].includes(currentUser?.role || role) ? 'View Categories \u2192' : 'View Catalogue \u2192'}
               </Link>
             </div>
           </div>

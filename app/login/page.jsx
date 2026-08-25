@@ -225,40 +225,50 @@ function LoginContent() {
     try {
       const cleanEmail = vendorEmail.trim().toLowerCase();
       const cleanPass = vendorPassword.trim();
-      let matchedVendor = null;
+
+      if (!cleanEmail) {
+        setErrorMessage('Please enter your supplier email or brand name.');
+        setIsLoading(false);
+        return;
+      }
+      if (!cleanPass) {
+        setErrorMessage('Please enter your vendor account password.');
+        setIsLoading(false);
+        return;
+      }
+
+      const { INITIAL_VENDORS } = await import('@/services/seedData');
+      let allVendors = [...INITIAL_VENDORS];
+
       if (typeof window !== 'undefined') {
         for (let i = 0; i < localStorage.length; i++) {
           const key = localStorage.key(i);
-          if (key && key.startsWith('cafepulse_vendors_')) {
-            const list = JSON.parse(localStorage.getItem(key) || '[]');
-            matchedVendor = list.find(
-              (v) =>
-                (v.email || '').toLowerCase().trim() === cleanEmail ||
-                (v.name || '').toLowerCase().trim() === cleanEmail
-            );
-            if (matchedVendor) break;
+          if (key && (key.startsWith('cafepulse_vendors_') || key === 'cafepulse_all_vendors')) {
+            try {
+              const list = JSON.parse(localStorage.getItem(key) || '[]');
+              allVendors.push(...list);
+            } catch (err) {}
           }
         }
       }
 
-      if (matchedVendor) {
-        if (matchedVendor.password && cleanPass && matchedVendor.password !== cleanPass) {
-          setIsLoading(false);
-          setErrorMessage('Incorrect password for this supplier account.');
-          return;
-        }
-      } else {
-        matchedVendor = {
-          id: 'ven-' + Date.now(),
-          name: vendorEmail.split('@')[0] || 'Supplier Partner',
-          email: cleanEmail,
-          contactPerson: 'Wholesale Lead',
-          phone: '+91 98000 00000',
-          city: 'Bengaluru',
-          category: 'Specialty Supplier',
-          leadTimeDays: 2,
-          paymentTerms: 'Net 15',
-        };
+      const matchedVendor = allVendors.find(
+        (v) =>
+          (v.email || '').toLowerCase().trim() === cleanEmail ||
+          (v.name || '').toLowerCase().trim() === cleanEmail
+      );
+
+      if (!matchedVendor) {
+        setIsLoading(false);
+        setErrorMessage('No supplier account found with this email. Please check your credentials or switch to the "+ Register Supplier" tab.');
+        return;
+      }
+
+      const expectedPass = matchedVendor.password || 'vendor123';
+      if (cleanPass !== expectedPass) {
+        setIsLoading(false);
+        setErrorMessage('Incorrect password for this supplier account. Please try again.');
+        return;
       }
 
       const session = {
@@ -469,7 +479,7 @@ function LoginContent() {
                       type="email"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      placeholder="admin@cafepulse.io or staff@cafepulse.in"
+                      placeholder="owner@yourcafe.com or staff email"
                       required
                       className="w-full pl-10 pr-4 py-2.5 text-sm bg-cafe-50/70 dark:bg-espresso-900/50 border border-cafe-200 dark:border-espresso-700 rounded-xl text-espresso-950 dark:text-cafe-50 focus:ring-2 focus:ring-caramel-500/40 focus:border-caramel-500 outline-none"
                     />

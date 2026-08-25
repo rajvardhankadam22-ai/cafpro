@@ -38,7 +38,6 @@ import { useDashboard } from '../layout';
 import { formatCurrency } from '@/lib/utils';
 import { useToast } from '@/components/Toast';
 import Link from 'next/link';
-import PagePurposeBanner from '@/components/PagePurposeBanner';
 
 export default function VendorsPage() {
   const {
@@ -221,34 +220,6 @@ export default function VendorsPage() {
           )}
         </div>
       </div>
-
-      <PagePurposeBanner
-        purpose="Wholesale partner hub. Onboard coffee roasteries, milk farms, and packaging vendors, lock in wholesale price books, and review incoming bids."
-        badgeText="Suppliers & Quotes Purpose"
-        accentColor="emerald"
-        primaryAction={{
-          label: "+ Add Supplier",
-          onClick: openAddVendor,
-        }}
-        actions={[
-          {
-            title: "Directory & Contact Reps",
-            desc: "Store supplier addresses, lead times, WhatsApp numbers, payment terms (Net 15/30), and minimum order values.",
-          },
-          {
-            title: "Shareable Onboarding Link",
-            desc: "Click 'Share Sign-up Link' to invite local roasters and dairy vendors to submit wholesale catalogs.",
-          },
-          {
-            title: "Review Bids & Proposals",
-            desc: "Review submitted ingredient prices in the 'Price Offers' tab and approve them to auto-populate future orders.",
-          },
-          {
-            title: "Price Comparison Matrix",
-            desc: "Compare multi-vendor price agreements side-by-side to identify the cheapest source for each ingredient.",
-          },
-        ]}
-      />
 
       {/* Pending Proposals Notification Alert Banner */}
       {pendingApps.length > 0 && activeTab !== 'applications' && (

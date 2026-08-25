@@ -25,15 +25,34 @@ export default function Header({
   currentUser,
   role = 'manager',
 }) {
-  const [isDark, setIsDark] = useState(false);
+  const [isDark, setIsDark] = useState(true);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
 
-  const toggleDarkMode = () => {
-    setIsDark(!isDark);
-    if (!isDark) {
+  React.useEffect(() => {
+    try {
+      const savedTheme = localStorage.getItem('cafepulse_theme');
+      if (savedTheme === 'light') {
+        setIsDark(false);
+        document.documentElement.classList.remove('dark');
+      } else {
+        setIsDark(true);
+        document.documentElement.classList.add('dark');
+      }
+    } catch (e) {
+      setIsDark(true);
       document.documentElement.classList.add('dark');
+    }
+  }, []);
+
+  const toggleDarkMode = () => {
+    const nextDark = !isDark;
+    setIsDark(nextDark);
+    if (nextDark) {
+      document.documentElement.classList.add('dark');
+      try { localStorage.setItem('cafepulse_theme', 'dark'); } catch (e) {}
     } else {
       document.documentElement.classList.remove('dark');
+      try { localStorage.setItem('cafepulse_theme', 'light'); } catch (e) {}
     }
   };
 
@@ -190,11 +209,11 @@ export default function Header({
                         </span>
                       </div>
                       <Link
-                        href="/dashboard/reorder"
+                        href={['admin', 'manager', 'head_barista'].includes(currentUser?.role || role) ? '/dashboard/reorder' : '/dashboard/inventory?status=lowstock'}
                         onClick={() => setIsNotificationsOpen(false)}
                         className="text-[11px] font-bold text-caramel-600 hover:underline"
                       >
-                        Open Planner
+                        {['admin', 'manager', 'head_barista'].includes(currentUser?.role || role) ? 'Open Planner' : 'View Stock'}
                       </Link>
                     </div>
 
@@ -202,7 +221,7 @@ export default function Header({
                       {outOfStockItems.map((item) => (
                         <Link
                           key={item.id}
-                          href="/dashboard/reorder"
+                          href={['admin', 'manager', 'head_barista'].includes(currentUser?.role || role) ? '/dashboard/reorder' : '/dashboard/inventory?status=lowstock'}
                           onClick={() => setIsNotificationsOpen(false)}
                           className="p-3 rounded-2xl bg-red-50/70 dark:bg-red-950/40 border border-red-200 dark:border-red-900/50 text-xs flex items-center justify-between hover:bg-red-100/70 dark:hover:bg-red-900/50 transition-all hover:scale-[1.01] cursor-pointer group shadow-sm"
                         >
@@ -220,7 +239,7 @@ export default function Header({
                             </div>
                           </div>
                           <span className="text-[10px] font-bold text-red-700 dark:text-red-300 bg-white/80 dark:bg-red-900/80 px-2.5 py-1 rounded-xl border border-red-200 dark:border-red-800 shrink-0 ml-2 group-hover:bg-red-600 group-hover:text-white transition-colors">
-                            Reorder &rarr;
+                            {['admin', 'manager', 'head_barista'].includes(currentUser?.role || role) ? 'Reorder \u2192' : 'View \u2192'}
                           </span>
                         </Link>
                       ))}
@@ -228,7 +247,7 @@ export default function Header({
                       {lowStockItems.map((item) => (
                         <Link
                           key={item.id}
-                          href="/dashboard/reorder"
+                          href={['admin', 'manager', 'head_barista'].includes(currentUser?.role || role) ? '/dashboard/reorder' : '/dashboard/inventory?status=lowstock'}
                           onClick={() => setIsNotificationsOpen(false)}
                           className="p-3 rounded-2xl bg-amber-50/70 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/50 text-xs flex items-center justify-between hover:bg-amber-100/70 dark:hover:bg-amber-900/50 transition-all hover:scale-[1.01] cursor-pointer group shadow-sm"
                         >
@@ -246,7 +265,7 @@ export default function Header({
                             </div>
                           </div>
                           <span className="text-[10px] font-bold text-amber-800 dark:text-amber-300 bg-white/80 dark:bg-amber-900/80 px-2.5 py-1 rounded-xl border border-amber-200 dark:border-amber-800 shrink-0 ml-2 group-hover:bg-amber-600 group-hover:text-white transition-colors">
-                            Restock &rarr;
+                            {['admin', 'manager', 'head_barista'].includes(currentUser?.role || role) ? 'Restock \u2192' : 'View \u2192'}
                           </span>
                         </Link>
                       ))}

@@ -120,14 +120,12 @@ export default function Sidebar({
 
   const visibleNavLinks = navLinks.filter((link) => {
     if (userRole === 'admin') return true;
-    if (userRole === 'manager') {
-      return link.href !== '/dashboard/analytics';
-    }
+    if (userRole === 'manager') return true;
     if (userRole === 'head_barista') {
-      return ['/dashboard', '/dashboard/inventory', '/dashboard/reorder', '/dashboard/orders', '/dashboard/categories', '/dashboard/history'].includes(link.href);
+      return ['/dashboard', '/dashboard/inventory', '/dashboard/reorder', '/dashboard/orders', '/dashboard/categories', '/dashboard/vendors', '/dashboard/history', '/dashboard/team'].includes(link.href);
     }
     if (userRole === 'barista') {
-      return ['/dashboard', '/dashboard/inventory', '/dashboard/history'].includes(link.href);
+      return ['/dashboard', '/dashboard/inventory', '/dashboard/orders', '/dashboard/history'].includes(link.href);
     }
     if (userRole === 'auditor') {
       return ['/dashboard', '/dashboard/inventory', '/dashboard/analytics', '/dashboard/history'].includes(link.href);

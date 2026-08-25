@@ -20,9 +20,8 @@ import {
 import Link from 'next/link';
 import { useDashboard } from '../layout';
 import InventoryTable from '@/components/InventoryTable';
-import { exportToCsv, formatCurrency } from '@/lib/utils';
+import { exportToCsv, formatCurrency, formatNumber } from '@/lib/utils';
 import { useToast } from '@/components/Toast';
-import PagePurposeBanner from '@/components/PagePurposeBanner';
 
 export default function InventoryCataloguePage() {
   const toast = useToast();
@@ -152,44 +151,17 @@ export default function InventoryCataloguePage() {
             <span>Export CSV</span>
           </button>
 
-          <button
-            onClick={openAddItem}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold text-white bg-gradient-to-r from-caramel-600 to-caramel-700 hover:from-caramel-500 hover:to-caramel-600 shadow-caramel-glow transition-all hover:scale-105 active:scale-95"
-          >
-            <Plus className="w-4 h-4" />
-            <span>+ Add New Item</span>
-          </button>
+          {['admin', 'manager'].includes(currentUser?.role || role) && (
+            <button
+              onClick={openAddItem}
+              className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold text-white bg-gradient-to-r from-caramel-600 to-caramel-700 hover:from-caramel-500 hover:to-caramel-600 shadow-caramel-glow transition-all hover:scale-105 active:scale-95"
+            >
+              <Plus className="w-4 h-4" />
+              <span>+ Add New Item</span>
+            </button>
+          )}
         </div>
       </div>
-
-      {/* Prominent Page Purpose Banner */}
-      <PagePurposeBanner
-        purpose="Your live inventory ledger. Add new beans and supplies, track on-hand quantities, log shift usage (-1), and export full CSV stock sheets."
-        badgeText="Items & Stock Purpose"
-        accentColor="caramel"
-        primaryAction={{
-          label: "+ Add New Item",
-          onClick: openAddItem,
-        }}
-        actions={[
-          {
-            title: "Add & Edit Catalogue",
-            desc: "Register coffee beans, syrups, dairy, and cups with SKU, PAR target, and unit purchase cost.",
-          },
-          {
-            title: "Shift Use (-1)",
-            desc: "Baristas tap -1 whenever they open a milk carton, syrup bottle, or fresh coffee bag during shifts.",
-          },
-          {
-            title: "Direct Restock (+)",
-            desc: "Click Restock to immediately log incoming stock or manual shelf adjustments with reason notes.",
-          },
-          {
-            title: "Filter & CSV Export",
-            desc: "Filter by stock health (Healthy, Low, Out of Stock) and export formatted inventory reports.",
-          },
-        ]}
-      />
 
       {/* Category Pills Slider */}
       <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">

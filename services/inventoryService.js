@@ -1110,8 +1110,10 @@ export async function addVendor(vendorData, userId = DEFAULT_USER_ID, userName =
     name: vendorData.name.trim(),
     contactPerson: vendorData.contactPerson ? vendorData.contactPerson.trim() : '',
     email: vendorData.email ? vendorData.email.trim() : '',
+    password: vendorData.password ? vendorData.password.trim() : 'vendor123',
     phone: vendorData.phone ? vendorData.phone.trim() : '',
     city: vendorData.city ? vendorData.city.trim() : '',
+    category: vendorData.category || 'Specialty Supplier',
     leadTimeDays: Number(vendorData.leadTimeDays) || 2,
     paymentTerms: vendorData.paymentTerms || 'Net 15',
     notes: vendorData.notes ? vendorData.notes.trim() : '',
@@ -1134,6 +1136,7 @@ export async function addVendor(vendorData, userId = DEFAULT_USER_ID, userName =
   const updatedVendors = [newVendor, ...currentVendors];
   setLocalData(vendorsKey, updatedVendors);
   bus.emit(`vendors_${uid}`, updatedVendors);
+  bus.emit('all_vendors_updated', updatedVendors);
 
   logActivity(
     uid,
@@ -1145,6 +1148,200 @@ export async function addVendor(vendorData, userId = DEFAULT_USER_ID, userName =
   );
 
   return newVendor;
+}
+
+/**
+ * Subscribe to all marketplace vendors across all stores
+ */
+export function subscribeToAllVendors(callback) {
+  const getVendorsFromLocal = () => {
+    let allLocal = [...INITIAL_VENDORS];
+    if (typeof window !== 'undefined') {
+      const seenEmails = new Set(allLocal.map((v) => (v.email || '').toLowerCase().trim()));
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && (k.startsWith('cafepulse_vendors_') || k === 'cafepulse_all_vendors')) {
+          const list = getLocalData(k, []);
+          for (const v of list) {
+            const emailKey = (v.email || v.name || '').toLowerCase().trim();
+            if (emailKey && !seenEmails.has(emailKey)) {
+              seenEmails.add(emailKey);
+              allLocal.push(v);
+            }
+          }
+        }
+      }
+    }
+    return allLocal;
+  };
+
+  callback(getVendorsFromLocal());
+
+  let unsubscribeFirestore = () => {};
+  if (isFirebaseConfigured() && db) {
+    try {
+      unsubscribeFirestore = onSnapshot(
+        collection(db, 'vendors'),
+        (snapshot) => {
+          if (!snapshot.empty) {
+            const list = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+            const merged = [...list];
+            const seen = new Set(list.map((v) => (v.email || v.name || '').toLowerCase().trim()));
+            for (const v of INITIAL_VENDORS) {
+              if (!seen.has((v.email || '').toLowerCase().trim())) {
+                merged.push(v);
+              }
+            }
+            callback(merged);
+          }
+        },
+        (e) => {}
+      );
+    } catch (e) {}
+  }
+
+  const busUnsub = bus.on('all_vendors_updated', () => {
+    callback(getVendorsFromLocal());
+  });
+
+  return () => {
+    unsubscribeFirestore();
+    busUnsub();
+  };
+}
+
+/**
+ * Subscribe to all registered cafés in the network for Wholesale Suppliers
+ */
+export function subscribeToAllRegisteredCafes(callback) {
+  const compileCafes = () => {
+    let cafesList = [];
+    const seenNames = new Set();
+
+    if (typeof window !== 'undefined') {
+      try {
+        // 1. Current active user store
+        const u = JSON.parse(localStorage.getItem('cafepulse_user_session') || '{}');
+        if (u && u.uid && (u.cafeName || u.role === 'admin')) {
+          const storeName = u.cafeName || 'My Café';
+          const branch = u.branchName || 'Main Branch';
+          const itemsKey = `cafepulse_items_${u.uid}`;
+          const storeItems = getLocalData(itemsKey, []);
+          const posKey = `cafepulse_pos_${u.uid}`;
+          const storePos = getLocalData(posKey, []);
+
+          const storeEntry = {
+            id: u.uid,
+            name: storeName,
+            branchName: branch,
+            city: 'Bengaluru',
+            state: 'Karnataka',
+            address: `${branch}, Bengaluru, Karnataka`,
+            badge: 'Live Connected Store',
+            monthlyOrdersCount: storePos.length,
+            managerName: u.displayName || 'Store Operations Lead',
+            managerPhone: '+91 80 4000 8000',
+            activeDemands: (storeItems || []).map((item) => {
+              const par = Number(item.parLevel) || 20;
+              const qty = Number(item.quantity) || 0;
+              const price = Number(item.unitPrice) || 0;
+              const isUrgent = qty <= (Number(item.reorderLevel) || 5);
+              return {
+                itemId: item.id,
+                itemName: item.name,
+                monthlyQty: Math.max(1, par),
+                unit: item.unit || 'packs',
+                targetBudget: price > 0 ? `₹${price.toLocaleString('en-IN')} / ${item.unit || 'pack'}` : 'Open Quote',
+                isUrgent,
+                currentStock: qty,
+                reorderLevel: item.reorderLevel || 5,
+                sku: item.sku || '',
+              };
+            }),
+            monthlyVolumeEstimate: (() => {
+              const totalVal = (storeItems || []).reduce(
+                (acc, i) => acc + (Number(i.quantity) || 0) * (Number(i.unitPrice) || 0),
+                0
+              );
+              return totalVal > 0 ? `₹${totalVal.toLocaleString('en-IN')} / mo` : '₹0 / mo';
+            })(),
+          };
+
+          seenNames.add(storeName.toLowerCase());
+          cafesList.push(storeEntry);
+        }
+
+        // 2. Add other registered cafés from localStorage keys
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && k.startsWith('cafepulse_items_') && !k.endsWith(u?.uid || 'NONE')) {
+            const uidKey = k.replace('cafepulse_items_', '');
+            const items = getLocalData(k, []);
+            const cafeName = `Registered Café (${uidKey.slice(0, 6).toUpperCase()})`;
+            if (!seenNames.has(cafeName.toLowerCase()) && items.length > 0) {
+              seenNames.add(cafeName.toLowerCase());
+              cafesList.push({
+                id: uidKey,
+                name: cafeName,
+                branchName: 'Store Hub',
+                city: 'Bengaluru',
+                state: 'Karnataka',
+                address: 'Network Store Branch',
+                badge: 'Active Partner Store',
+                monthlyOrdersCount: 0,
+                managerName: 'Store Manager',
+                managerPhone: '+91 80 4000 0000',
+                activeDemands: items.map((item) => ({
+                  itemId: item.id,
+                  itemName: item.name,
+                  monthlyQty: Number(item.parLevel) || 20,
+                  unit: item.unit || 'packs',
+                  targetBudget: Number(item.unitPrice) > 0 ? `₹${Number(item.unitPrice).toLocaleString('en-IN')} / ${item.unit || 'pack'}` : 'Open Quote',
+                  isUrgent: Number(item.quantity) <= (Number(item.reorderLevel) || 5),
+                  currentStock: Number(item.quantity) || 0,
+                  reorderLevel: item.reorderLevel || 5,
+                  sku: item.sku || '',
+                })),
+                monthlyVolumeEstimate: (() => {
+                  const totalVal = (items || []).reduce(
+                    (acc, i) => acc + (Number(i.quantity) || 0) * (Number(i.unitPrice) || 0),
+                    0
+                  );
+                  return totalVal > 0 ? `₹${totalVal.toLocaleString('en-IN')} / mo` : '₹0 / mo';
+                })(),
+              });
+            }
+          }
+        }
+      } catch (e) {}
+    }
+
+    callback(cafesList);
+  };
+
+  compileCafes();
+
+  let unsubscribeFirestore = () => {};
+  if (isFirebaseConfigured() && db) {
+    try {
+      unsubscribeFirestore = onSnapshot(
+        collection(db, 'users'),
+        (snapshot) => {
+          if (!snapshot.empty) {
+            compileCafes();
+          }
+        },
+        (e) => {}
+      );
+    } catch (e) {}
+  }
+
+  const busUnsub = bus.on('cafes_updated', compileCafes);
+
+  return () => {
+    unsubscribeFirestore();
+    busUnsub();
+  };
 }
 
 /**
