@@ -276,6 +276,7 @@ export const REGISTERED_CAFES = [
 export const INITIAL_STAFF_MEMBERS = [
   {
     id: 'staff-01',
+    userId: 'guest',
     name: 'Store Admin',
     email: 'admin@cafepulse.io',
     phone: '+91 98450 12345',
@@ -289,6 +290,7 @@ export const INITIAL_STAFF_MEMBERS = [
   },
   {
     id: 'staff-02',
+    userId: 'guest',
     name: 'Inventory Manager',
     email: 'manager@cafepulse.io',
     phone: '+91 98450 55667',
@@ -302,6 +304,7 @@ export const INITIAL_STAFF_MEMBERS = [
   },
   {
     id: 'staff-03',
+    userId: 'guest',
     name: 'Shift Lead Barista',
     email: 'headbarista@cafepulse.io',
     phone: '+91 97110 44332',
@@ -315,6 +318,7 @@ export const INITIAL_STAFF_MEMBERS = [
   },
   {
     id: 'staff-04',
+    userId: 'guest',
     name: 'Floor Barista',
     email: 'barista@cafepulse.io',
     phone: '+91 97110 88990',
@@ -328,6 +332,7 @@ export const INITIAL_STAFF_MEMBERS = [
   },
   {
     id: 'staff-05',
+    userId: 'guest',
     name: 'Stock Auditor',
     email: 'auditor@cafepulse.io',
     phone: '+91 99220 33445',

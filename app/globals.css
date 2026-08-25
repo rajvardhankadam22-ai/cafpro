@@ -74,3 +74,11 @@
 ::-webkit-scrollbar-thumb:hover {
   background: #BA9267;
 }
+
+/* Hide Next.js development indicator badge */
+nextjs-portal,
+[data-nextjs-dev-indicator],
+[data-nextjs-toast],
+#__next-build-watcher {
+  display: none !important;
+}

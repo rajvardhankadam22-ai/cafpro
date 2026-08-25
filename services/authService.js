@@ -207,11 +207,10 @@ export async function loginWithEmail(email, password) {
     }
 
     // Verify Password or PIN
-    const matchesPassword = foundStaff.password && foundStaff.password === cleanPass;
-    const matchesPin = foundStaff.pin && String(foundStaff.pin).trim() === cleanPass;
-    const matchesDefault = !foundStaff.password && cleanPass.length >= 4;
+    const matchesPassword = Boolean(foundStaff.password && foundStaff.password === cleanPass);
+    const matchesPin = Boolean(foundStaff.pin && String(foundStaff.pin).trim() === cleanPass);
 
-    if (!matchesPassword && !matchesPin && !matchesDefault) {
+    if (!matchesPassword && !matchesPin) {
       const err = new Error('Invalid credentials. Please enter your registered staff password or 4-digit PIN.');
       err.code = 'auth/wrong-password';
       throw err;
@@ -219,7 +218,7 @@ export async function loginWithEmail(email, password) {
 
     // Create user session (Admin has isStaff=false, isRoleLocked=false)
     const isAdminUser = foundStaff.role === 'admin';
-    const storeUid = foundStaff.userId || foundStaff.id;
+    const storeUid = foundStaff.userId || 'guest';
     const staffUser = {
       uid: storeUid,
       staffId: foundStaff.id,
@@ -371,7 +370,7 @@ export async function loginWithPin(pin, email = null) {
   }
 
   const isAdminUser = foundStaff.role === 'admin';
-  const storeUid = foundStaff.userId || foundStaff.id;
+  const storeUid = foundStaff.userId || 'guest';
   const staffUser = {
     uid: storeUid,
     staffId: foundStaff.id,

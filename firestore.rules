@@ -1,38 +1,55 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Inventory Items collection - user isolated
+    // Inventory Items collection - tenant isolated
     match /inventory_items/{itemId} {
-      allow read, write: if request.auth != null && (resource == null || resource.data.userId == request.auth.uid);
+      allow read, update, delete: if request.auth != null && (resource == null || resource.data.userId == request.auth.uid);
       allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
-      allow read, write: if true; // Permissive fallback for local testing & demo
     }
     
-    // Categories collection - user isolated
+    // Categories collection - tenant isolated
     match /categories/{catId} {
-      allow read, write: if request.auth != null && (resource == null || resource.data.userId == request.auth.uid);
+      allow read, update, delete: if request.auth != null && (resource == null || resource.data.userId == request.auth.uid);
       allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
-      allow read, write: if true;
     }
     
-    // Purchase Orders collection - user isolated
+    // Purchase Orders collection - tenant isolated
     match /purchase_orders/{poId} {
-      allow read, write: if request.auth != null && (resource == null || resource.data.userId == request.auth.uid);
+      allow read, update, delete: if request.auth != null && (resource == null || resource.data.userId == request.auth.uid);
       allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
-      allow read, write: if true;
+    }
+
+    // Vendors & Suppliers collection - tenant isolated
+    match /vendors/{vendorId} {
+      allow read, update, delete: if request.auth != null && (resource == null || resource.data.userId == request.auth.uid);
+      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+    }
+
+    // Staff Members collection - tenant isolated
+    match /staff_members/{staffId} {
+      allow read, update, delete: if request.auth != null && (resource == null || resource.data.userId == request.auth.uid);
+      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+    }
+
+    // Public Marketplace Supplier Applications
+    match /supplier_applications/{appId} {
+      // Allows prospective suppliers to self-register and submit wholesale bids
+      allow create: if true;
+      // Allows store owners to read and review submitted bids
+      allow read, update, delete: if request.auth != null;
     }
     
-    // Activity Logs - user isolated
+    // Activity Logs - tenant isolated
     match /activity_logs/{logId} {
       allow read: if request.auth != null && (resource == null || resource.data.userId == request.auth.uid);
-      allow create: if request.auth != null;
-      allow read, write: if true;
+      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+      allow delete: if request.auth != null && resource.data.userId == request.auth.uid;
     }
     
     // Users collection
     match /users/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
-      allow read, write: if true;
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == userId;
     }
   }
 }

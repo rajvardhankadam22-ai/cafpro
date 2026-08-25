@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import React, { useState, useEffect, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -34,16 +34,24 @@ import {
 import { isFirebaseConfigured } from '@/lib/firebase';
 import { useToast } from '@/components/Toast';
 
-export default function LoginPage() {
+function LoginContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const toast = useToast();
   const isLiveFirebase = isFirebaseConfigured();
 
+  const typeParam = searchParams ? (searchParams.get('type') || searchParams.get('portal')) : null;
+  const tabParam = searchParams ? (searchParams.get('tab') || searchParams.get('mode')) : null;
+
   // Primary portal category: 'cafe' | 'vendor'
-  const [portalType, setPortalType] = useState('cafe');
+  const [portalType, setPortalType] = useState(
+    typeParam === 'vendor' || typeParam === 'supplier' ? 'vendor' : 'cafe'
+  );
 
   // Sub-tabs for cafe: 'login' | 'signup' | 'pin'
-  const [cafeTab, setCafeTab] = useState('login');
+  const [cafeTab, setCafeTab] = useState(
+    tabParam === 'signup' || tabParam === 'register' ? 'signup' : tabParam === 'pin' ? 'pin' : 'login'
+  );
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -54,7 +62,23 @@ export default function LoginPage() {
   const [errorMessage, setErrorMessage] = useState('');
 
   // Supplier Auth Form State
-  const [vendorTab, setVendorTab] = useState('login'); // 'login' | 'register'
+  const [vendorTab, setVendorTab] = useState(
+    tabParam === 'register' || tabParam === 'signup' ? 'register' : 'login'
+  ); // 'login' | 'register'
+
+  useEffect(() => {
+    if (typeParam === 'vendor' || typeParam === 'supplier') {
+      setPortalType('vendor');
+    } else if (typeParam === 'cafe') {
+      setPortalType('cafe');
+    }
+    if (tabParam === 'register' || tabParam === 'signup') {
+      setVendorTab('register');
+      setCafeTab('signup');
+    } else if (tabParam === 'pin') {
+      setCafeTab('pin');
+    }
+  }, [typeParam, tabParam]);
   const [vendorEmail, setVendorEmail] = useState('');
   const [vendorPassword, setVendorPassword] = useState('');
   const [vendorRegForm, setVendorRegForm] = useState({
@@ -858,5 +882,19 @@ export default function LoginPage() {
         )}
       </motion.div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-cafe-100/60 dark:bg-[#0C0908] flex items-center justify-center p-4">
+          <div className="w-8 h-8 border-2 border-caramel-500 border-t-transparent rounded-full animate-spin" />
+        </div>
+      }
+    >
+      <LoginContent />
+    </Suspense>
   );
 }

@@ -64,7 +64,7 @@ export default function HomePage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
           {/* Gate 1: Café Management & Staff */}
           <Link
-            href="/login"
+            href="/login?type=cafe"
             className="p-5 rounded-3xl bg-white dark:bg-espresso-900 border border-caramel-300 dark:border-espresso-700 hover:border-caramel-500 dark:hover:border-caramel-600 shadow-cafe-sm hover:shadow-cafe-md transition-all group text-left flex flex-col justify-between space-y-3"
           >
             <div className="flex items-center justify-between">
@@ -85,7 +85,7 @@ export default function HomePage() {
 
           {/* Gate 2: Wholesale Suppliers & Vendors */}
           <Link
-            href="/supplier/portal"
+            href="/login?type=vendor"
             className="p-5 rounded-3xl bg-white dark:bg-espresso-900 border border-emerald-300/80 dark:border-emerald-800 hover:border-emerald-500 dark:hover:border-emerald-600 shadow-cafe-sm hover:shadow-cafe-md transition-all group text-left flex flex-col justify-between space-y-3"
           >
             <div className="flex items-center justify-between">
@@ -99,7 +99,7 @@ export default function HomePage() {
                 Wholesale Supplier Portal
               </h2>
               <p className="text-[11px] text-espresso-500 dark:text-cafe-400 mt-1 leading-snug">
-                Vendor sign in, create vendor account, live café requirements & quote bidding.
+                Supplier sign in, + Register supplier business, view café bids & demand.
               </p>
             </div>
           </Link>

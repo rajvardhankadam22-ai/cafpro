@@ -590,6 +590,7 @@ export async function addVendorPriceMapping(itemId, vendorMappingData, userId = 
   const uid = userId || DEFAULT_USER_ID;
   const itemsKey = getLocalItemsKey(uid);
   const currentInventory = getLocalData(itemsKey, []);
+  let targetItem = null;
 
   const updatedInventory = currentInventory.map((item) => {
     const matchId =
@@ -779,7 +780,9 @@ export async function receivePurchaseOrder(poId, deliveryData, userId = DEFAULT_
 
   const updatedPoItems = (deliveryData.items || targetPo.items).map((item) => {
     const receivedQty = Math.max(0, Number(item.receivedQty) || 0);
-    const unitPrice = Math.max(0, Number(item.unitPrice) || Number(item.orderedQty) || 0);
+    const unitPrice = item.unitPrice !== undefined && item.unitPrice !== null && !isNaN(Number(item.unitPrice))
+      ? Math.max(0, Number(item.unitPrice))
+      : 0;
     const orderedQty = Number(item.orderedQty) || 0;
 
     if (receivedQty < orderedQty) {
@@ -1852,6 +1855,11 @@ export async function seedSampleData(userId = DEFAULT_USER_ID) {
   const staffWithUser = INITIAL_STAFF_MEMBERS.map((s) => ({
     ...s,
     id: `${uid}_${s.id}`,
+    userId: uid,
+  }));
+  const vendorsWithUser = INITIAL_VENDORS.map((v) => ({
+    ...v,
+    id: `${uid}_${v.id}`,
     userId: uid,
   }));
 
