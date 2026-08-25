@@ -282,17 +282,24 @@ export default function SupplierPortalPage() {
     ? purchaseOrders.filter((po) => {
         const poSup = (po.supplierName || '').toLowerCase().trim();
         const curName = (currentVendor.name || '').toLowerCase().trim();
-        return poSup.includes(curName) || curName.includes(poSup) || po.vendorId === currentVendor.id;
+        const curEmail = (currentVendor.email || '').toLowerCase().trim();
+        const poEmail = (po.supplierEmail || '').toLowerCase().trim();
+        return (
+          (curName && (poSup.includes(curName) || curName.includes(poSup))) ||
+          (curEmail && poEmail && poEmail === curEmail) ||
+          po.vendorId === currentVendor.id ||
+          po.supplierId === currentVendor.id
+        );
       })
     : [];
 
   // Filter inventory items supplied by this vendor
   const vendorSuppliedItems = currentVendor
     ? inventoryItems.filter((item) => {
-        const isDirect = (item.supplier || '').toLowerCase() === (currentVendor.name || '').toLowerCase();
+        const isDirect = (item.supplier || '').toLowerCase().trim() === (currentVendor.name || '').toLowerCase().trim();
         const hasMapping = (item.vendorMappings || []).some(
           (m) =>
-            (m.vendorName || '').toLowerCase() === (currentVendor.name || '').toLowerCase() ||
+            (m.vendorName || '').toLowerCase().trim() === (currentVendor.name || '').toLowerCase().trim() ||
             m.vendorId === currentVendor.id
         );
         return isDirect || hasMapping;
@@ -922,104 +929,114 @@ export default function SupplierPortalPage() {
               </p>
             </div>
 
-            <div className="grid grid-cols-1 gap-5">
-              {liveCafes.map((cafe) => (
-                <div
-                  key={cafe.id}
-                  className="p-5 sm:p-6 rounded-3xl bg-[#140F0D] border border-espresso-800 shadow-md space-y-4"
-                >
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-espresso-800">
-                    <div className="flex items-center gap-3">
-                      <div className="w-11 h-11 rounded-2xl bg-caramel-950 text-caramel-400 border border-caramel-800 flex items-center justify-center font-bold">
-                        <Store className="w-5 h-5" />
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <h3 className="text-base font-bold text-cafe-50">{cafe.name}</h3>
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                            {cafe.badge || 'Connected Store'}
-                          </span>
+            {liveCafes.length === 0 ? (
+              <div className="p-12 text-center rounded-3xl bg-[#140F0D] border border-espresso-800/80 space-y-3">
+                <Store className="w-10 h-10 text-espresso-600 mx-auto" />
+                <p className="text-base font-bold text-cafe-100">No connected café stores in network yet</p>
+                <p className="text-xs text-espresso-400 max-w-md mx-auto">
+                  When new café accounts register on the platform, their store profile, stock levels, and replenishment requirements will appear here in real time.
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-5">
+                {liveCafes.map((cafe) => (
+                  <div
+                    key={cafe.id}
+                    className="p-5 sm:p-6 rounded-3xl bg-[#140F0D] border border-espresso-800 shadow-md space-y-4"
+                  >
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-espresso-800">
+                      <div className="flex items-center gap-3">
+                        <div className="w-11 h-11 rounded-2xl bg-caramel-950 text-caramel-400 border border-caramel-800 flex items-center justify-center font-bold">
+                          <Store className="w-5 h-5" />
                         </div>
-                        <p className="text-xs text-espresso-400">📍 {cafe.address || 'Bengaluru, Karnataka'}</p>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h3 className="text-base font-bold text-cafe-50">{cafe.name}</h3>
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                              {cafe.badge || 'Connected Store'}
+                            </span>
+                          </div>
+                          <p className="text-xs text-espresso-400">📍 {cafe.address || 'Bengaluru, Karnataka'}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                          Monthly Stock Valuation: {cafe.monthlyVolumeEstimate}
+                        </span>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
-                        Monthly Stock Valuation: {cafe.monthlyVolumeEstimate}
-                      </span>
-                    </div>
-                  </div>
 
-                  {/* Requirements Grid */}
-                  {!cafe.activeDemands || cafe.activeDemands.length === 0 ? (
-                    <div className="p-8 text-center rounded-2xl bg-black/40 border border-espresso-800/80 space-y-2">
-                      <Package className="w-8 h-8 text-espresso-600 mx-auto" />
-                      <p className="text-sm font-bold text-cafe-200">No Open Item Demands</p>
-                      <p className="text-xs text-espresso-400 max-w-sm mx-auto">
-                        No ingredient requirements have been posted by this store yet. When the café manager adds items or logs low stock, they will appear here in real time.
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                      {cafe.activeDemands.map((demand, idx) => {
-                        const demandKey = `${cafe.id}_${demand.itemId}`;
-                        const isQuoted = submittedQuotes[demandKey];
+                    {/* Requirements Grid */}
+                    {!cafe.activeDemands || cafe.activeDemands.length === 0 ? (
+                      <div className="p-8 text-center rounded-2xl bg-black/40 border border-espresso-800/80 space-y-2">
+                        <Package className="w-8 h-8 text-espresso-600 mx-auto" />
+                        <p className="text-sm font-bold text-cafe-200">No Open Item Demands</p>
+                        <p className="text-xs text-espresso-400 max-w-sm mx-auto">
+                          No ingredient requirements have been posted by this store yet. When the café manager adds items or logs low stock, they will appear here in real time.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        {cafe.activeDemands.map((demand, idx) => {
+                          const demandKey = `${cafe.id}_${demand.itemId}`;
+                          const isQuoted = submittedQuotes[demandKey];
 
-                        return (
-                          <div
-                            key={idx}
-                            className={`p-4 rounded-2xl bg-black/50 border flex flex-col justify-between space-y-3 transition-all ${
-                              demand.isUrgent
-                                ? 'border-amber-800/70 hover:border-amber-600'
-                                : 'border-espresso-800/90 hover:border-emerald-700/60'
-                            }`}
-                          >
-                            <div className="space-y-1">
-                              <div className="flex items-start justify-between gap-2">
-                                <h4 className="font-bold text-xs text-cafe-50 leading-snug">
-                                  {demand.itemName}
-                                </h4>
-                                <span className="px-1.5 py-0.5 rounded text-[9px] font-mono bg-espresso-900 text-espresso-400">
-                                  {demand.unit}
-                                </span>
-                              </div>
-                              <p className="text-xs text-caramel-300 font-bold">
-                                Target PAR: {demand.monthlyQty} {demand.unit}
-                              </p>
-                              <p className="text-[11px] text-espresso-400">
-                                Standard Rate: <span className="text-emerald-400 font-medium">{demand.targetBudget}</span>
-                              </p>
-                              {demand.isUrgent && (
-                                <p className="text-[10px] font-bold text-amber-400 flex items-center gap-1">
-                                  <span>⚠️ Urgent: Café is Low on Stock ({demand.currentStock} left)</span>
-                                </p>
-                              )}
-                            </div>
-
-                            <div className="pt-2 border-t border-espresso-800/80">
-                              {isQuoted ? (
-                                <div className="w-full py-2 px-3 rounded-xl bg-emerald-950/60 border border-emerald-700 text-[11px] font-bold text-emerald-300 flex items-center justify-center gap-1.5">
-                                  <Check className="w-3.5 h-3.5" />
-                                  <span>Quote Submitted ✓</span>
+                          return (
+                            <div
+                              key={idx}
+                              className={`p-4 rounded-2xl bg-black/50 border flex flex-col justify-between space-y-3 transition-all ${
+                                demand.isUrgent
+                                  ? 'border-amber-800/70 hover:border-amber-600'
+                                  : 'border-espresso-800/90 hover:border-emerald-700/60'
+                              }`}
+                            >
+                              <div className="space-y-1">
+                                <div className="flex items-start justify-between gap-2">
+                                  <h4 className="font-bold text-xs text-cafe-50 leading-snug">
+                                    {demand.itemName}
+                                  </h4>
+                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-mono bg-espresso-900 text-espresso-400">
+                                    {demand.unit}
+                                  </span>
                                 </div>
-                              ) : (
-                                <button
-                                  onClick={() => handleOpenQuoteModal(cafe, demand)}
-                                  className="w-full py-2 px-3 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 shadow-md transition-all active:scale-95 flex items-center justify-center gap-1.5"
-                                >
-                                  <Send className="w-3.5 h-3.5" />
-                                  <span>Apply / Submit Quote</span>
-                                </button>
-                              )}
+                                <p className="text-xs text-caramel-300 font-bold">
+                                  Target PAR: {demand.monthlyQty} {demand.unit}
+                                </p>
+                                <p className="text-[11px] text-espresso-400">
+                                  Standard Rate: <span className="text-emerald-400 font-medium">{demand.targetBudget}</span>
+                                </p>
+                                {demand.isUrgent && (
+                                  <p className="text-[10px] font-bold text-amber-400 flex items-center gap-1">
+                                    <span>⚠️ Urgent: Café is Low on Stock ({demand.currentStock} left)</span>
+                                  </p>
+                                )}
+                              </div>
+
+                              <div className="pt-2 border-t border-espresso-800/80">
+                                {isQuoted ? (
+                                  <div className="w-full py-2 px-3 rounded-xl bg-emerald-950/60 border border-emerald-700 text-[11px] font-bold text-emerald-300 flex items-center justify-center gap-1.5">
+                                    <Check className="w-3.5 h-3.5" />
+                                    <span>Quote Submitted ✓</span>
+                                  </div>
+                                ) : (
+                                  <button
+                                    onClick={() => handleOpenQuoteModal(cafe, demand)}
+                                    className="w-full py-2 px-3 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 shadow-md transition-all active:scale-95 flex items-center justify-center gap-1.5"
+                                  >
+                                    <Send className="w-3.5 h-3.5" />
+                                    <span>Apply / Submit Quote</span>
+                                  </button>
+                                )}
+                              </div>
                             </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 

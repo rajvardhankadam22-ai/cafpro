@@ -133,7 +133,61 @@ export function logActivity(userId = DEFAULT_USER_ID, type, itemId, itemName, de
  * 1. Subscribe to User's Isolated Inventory Items
  */
 export function subscribeToInventory(userId, callback) {
-  const uid = userId || DEFAULT_USER_ID;
+  // If userId is null or 'all', subscribe to ALL inventory items across all cafes
+  if (!userId || userId === 'all') {
+    const getAllLocalItems = () => {
+      const seen = new Set();
+      const allItems = [];
+      if (typeof window !== 'undefined') {
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && k.startsWith('cafepulse_items_')) {
+            const list = getLocalData(k, []);
+            for (const itm of list) {
+              if (itm && itm.id && !seen.has(itm.id)) {
+                seen.add(itm.id);
+                allItems.push(itm);
+              }
+            }
+          }
+        }
+      }
+      return allItems.length > 0 ? allItems : INITIAL_INVENTORY_ITEMS;
+    };
+
+    if (isFirebaseConfigured() && db) {
+      try {
+        const q = query(collection(db, 'inventory_items'));
+        const unsubscribe = onSnapshot(
+          q,
+          (snapshot) => {
+            if (!snapshot.empty) {
+              const rawItems = snapshot.docs.map((d) => ({ ...d.data(), id: d.id }));
+              const seen = new Set();
+              const uniqueItems = [];
+              for (const itm of rawItems) {
+                if (itm && itm.id && !seen.has(itm.id)) {
+                  seen.add(itm.id);
+                  uniqueItems.push(itm);
+                }
+              }
+              callback(uniqueItems);
+            } else {
+              callback(getAllLocalItems());
+            }
+          },
+          () => callback(getAllLocalItems())
+        );
+        return unsubscribe;
+      } catch (e) {}
+    }
+
+    setTimeout(() => callback(getAllLocalItems()), 0);
+    const busUnsub = bus.on('all_items_updated', () => callback(getAllLocalItems()));
+    return busUnsub;
+  }
+
+  const uid = userId;
 
   if (isFirebaseConfigured() && db) {
     try {
@@ -325,7 +379,63 @@ export function subscribeToActivityLogs(userId, callback) {
  * 4. Subscribe to Purchase Orders
  */
 export function subscribeToPurchaseOrders(userId, callback) {
-  const uid = userId || DEFAULT_USER_ID;
+  // If userId is null or 'all', subscribe to ALL purchase orders across all cafes
+  if (!userId || userId === 'all') {
+    const getAllLocalPos = () => {
+      const seen = new Set();
+      const allPos = [];
+      if (typeof window !== 'undefined') {
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && k.startsWith('cafepulse_pos_')) {
+            const list = getLocalData(k, []);
+            for (const p of list) {
+              if (p && p.id && !seen.has(p.id)) {
+                seen.add(p.id);
+                allPos.push(p);
+              }
+            }
+          }
+        }
+      }
+      allPos.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+      return allPos.length > 0 ? allPos : INITIAL_PURCHASE_ORDERS;
+    };
+
+    if (isFirebaseConfigured() && db) {
+      try {
+        const q = query(collection(db, 'purchase_orders'));
+        const unsubscribe = onSnapshot(
+          q,
+          (snapshot) => {
+            if (!snapshot.empty) {
+              const rawPos = snapshot.docs.map((d) => ({ ...d.data(), id: d.id }));
+              const seen = new Set();
+              const uniquePos = [];
+              for (const p of rawPos) {
+                if (p && p.id && !seen.has(p.id)) {
+                  seen.add(p.id);
+                  uniquePos.push(p);
+                }
+              }
+              uniquePos.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+              callback(uniquePos);
+            } else {
+              callback(getAllLocalPos());
+            }
+          },
+          () => callback(getAllLocalPos())
+        );
+        return unsubscribe;
+      } catch (e) {}
+    }
+
+    setTimeout(() => callback(getAllLocalPos()), 0);
+    const busUnsub = bus.on('all_pos_updated', () => callback(getAllLocalPos()));
+    return busUnsub;
+  }
+
+  const uid = userId;
 
   if (isFirebaseConfigured() && db) {
     try {
@@ -902,124 +1012,6 @@ export async function receivePurchaseOrder(poId, deliveryData, userId = DEFAULT_
 }
 
 /**
- * Vendor Marks PO as Dispatched / In-Transit
- */
-export async function updatePurchaseOrderDispatch(
-  poId,
-  dispatchDetails = {},
-  userId = DEFAULT_USER_ID,
-  userName = 'Supplier Portal'
-) {
-  const uid = userId || DEFAULT_USER_ID;
-  const posKey = getLocalPosKey(uid);
-  const currentPos = getLocalData(posKey, []);
-  const targetPo = currentPos.find((p) => p.id === poId || p.poNumber === poId);
-  if (!targetPo) return;
-
-  const updatedPo = {
-    ...targetPo,
-    status: 'PENDING_DELIVERY',
-    dispatchStatus: 'DISPATCHED',
-    dispatchedAt: new Date().toISOString(),
-    trackingNumber: dispatchDetails.trackingNumber || `TRK-${Date.now().toString().slice(-6)}`,
-    carrierName: dispatchDetails.carrierName || 'Direct Delivery Fleet',
-    dispatchNotes: dispatchDetails.notes || 'Order packed and dispatched from vendor warehouse.',
-  };
-
-  if (isFirebaseConfigured() && db) {
-    try {
-      await updateDoc(doc(db, 'purchase_orders', targetPo.id), {
-        status: 'PENDING_DELIVERY',
-        dispatchStatus: 'DISPATCHED',
-        dispatchedAt: serverTimestamp(),
-        trackingNumber: updatedPo.trackingNumber,
-        carrierName: updatedPo.carrierName,
-        dispatchNotes: updatedPo.dispatchNotes,
-      });
-    } catch (e) {}
-  }
-
-  const updatedList = currentPos.map((p) => (p.id === targetPo.id ? updatedPo : p));
-  setLocalData(posKey, updatedList);
-  bus.emit(`pos_${uid}`, updatedList);
-
-  logActivity(
-    uid,
-    'PO_DISPATCHED_BY_VENDOR',
-    targetPo.id,
-    targetPo.poNumber,
-    `Vendor ${targetPo.supplierName} marked PO ${targetPo.poNumber} as Dispatched (${updatedPo.trackingNumber})`,
-    userName
-  );
-
-  return updatedPo;
-}
-
-/**
- * Categories CRUD
- */
-export async function addCategory(categoryData, userId = DEFAULT_USER_ID) {
-  const uid = userId || DEFAULT_USER_ID;
-  const clean = {
-    userId: uid,
-    name: categoryData.name.trim(),
-    slug: categoryData.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
-    icon: categoryData.icon || 'Coffee',
-    description: categoryData.description ? categoryData.description.trim() : '',
-  };
-
-  const newId = 'cat-' + Date.now() + '-' + Math.random().toString(36).substring(2, 5);
-
-  if (isFirebaseConfigured() && db) {
-    try {
-      await setDoc(doc(db, 'categories', newId), {
-        ...clean,
-        id: newId,
-        createdAt: serverTimestamp(),
-      });
-    } catch (e) {}
-  }
-
-  const catsKey = getLocalCatsKey(uid);
-  const cats = getLocalData(catsKey, []);
-  const updated = [...cats, { id: newId, ...clean, createdAt: new Date().toISOString() }];
-  setLocalData(catsKey, updated);
-  bus.emit(`categories_${uid}`, updated);
-
-  return newId;
-}
-
-export async function updateCategory(id, updatedData, userId = DEFAULT_USER_ID) {
-  const uid = userId || DEFAULT_USER_ID;
-  if (isFirebaseConfigured() && db) {
-    try {
-      await setDoc(doc(db, 'categories', id), { ...updatedData, userId: uid }, { merge: true });
-    } catch (e) {}
-  }
-
-  const catsKey = getLocalCatsKey(uid);
-  const cats = getLocalData(catsKey, []);
-  const updated = cats.map((c) => (c.id === id ? { ...c, ...updatedData, userId: uid } : c));
-  setLocalData(catsKey, updated);
-  bus.emit(`categories_${uid}`, updated);
-}
-
-export async function deleteCategory(id, userId = DEFAULT_USER_ID) {
-  const uid = userId || DEFAULT_USER_ID;
-  if (isFirebaseConfigured() && db) {
-    try {
-      await deleteDoc(doc(db, 'categories', id));
-    } catch (e) {}
-  }
-
-  const catsKey = getLocalCatsKey(uid);
-  const cats = getLocalData(catsKey, []);
-  const updated = cats.filter((c) => c.id !== id);
-  setLocalData(catsKey, updated);
-  bus.emit(`categories_${uid}`, updated);
-}
-
-/**
  * Real-time Vendor Subscription
  */
 const OLD_DEMO_VENDOR_KEYWORDS = [
@@ -1210,109 +1202,303 @@ export function subscribeToAllVendors(callback) {
   };
 }
 
+export async function updatePurchaseOrderDispatch(
+  poId,
+  dispatchDetails = {},
+  userId = null,
+  userName = 'Supplier Portal'
+) {
+  let foundUid = userId;
+  let targetPo = null;
+
+  // Search across localStorage keys if userId is not certain
+  if (typeof window !== 'undefined') {
+    if (foundUid) {
+      const list = getLocalData(getLocalPosKey(foundUid), []);
+      targetPo = list.find((p) => p.id === poId || p.poNumber === poId);
+    }
+    if (!targetPo) {
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith('cafepulse_pos_')) {
+          const list = getLocalData(k, []);
+          const match = list.find((p) => p.id === poId || p.poNumber === poId);
+          if (match) {
+            targetPo = match;
+            foundUid = k.replace('cafepulse_pos_', '');
+            break;
+          }
+        }
+      }
+    }
+  }
+
+  const uid = foundUid || DEFAULT_USER_ID;
+  const updatedPo = {
+    ...(targetPo || { id: poId, poNumber: poId }),
+    status: 'PENDING_DELIVERY',
+    dispatchStatus: 'DISPATCHED',
+    dispatchedAt: new Date().toISOString(),
+    trackingNumber: dispatchDetails.trackingNumber || `TRK-${Date.now().toString().slice(-6)}`,
+    carrierName: dispatchDetails.carrierName || 'Direct Delivery Fleet',
+    dispatchNotes: dispatchDetails.notes || 'Order packed and dispatched from vendor warehouse.',
+  };
+
+  if (isFirebaseConfigured() && db) {
+    try {
+      await updateDoc(doc(db, 'purchase_orders', poId), {
+        status: 'PENDING_DELIVERY',
+        dispatchStatus: 'DISPATCHED',
+        dispatchedAt: serverTimestamp(),
+        trackingNumber: updatedPo.trackingNumber,
+        carrierName: updatedPo.carrierName,
+        dispatchNotes: updatedPo.dispatchNotes,
+      });
+    } catch (e) {}
+  }
+
+  // Update in target cafe's local store
+  if (typeof window !== 'undefined') {
+    const posKey = getLocalPosKey(uid);
+    const pos = getLocalData(posKey, []);
+    const updatedList = pos.map((p) => (p.id === poId || p.poNumber === poId ? updatedPo : p));
+    if (!pos.some((p) => p.id === poId || p.poNumber === poId)) {
+      updatedList.unshift(updatedPo);
+    }
+    setLocalData(posKey, updatedList);
+    bus.emit(`pos_${uid}`, updatedList);
+    bus.emit('all_pos_updated', updatedPo);
+  }
+
+  logActivity(
+    uid,
+    'PO_DISPATCHED_BY_VENDOR',
+    poId,
+    targetPo?.poNumber || poId,
+    `Vendor marked PO ${targetPo?.poNumber || poId} as Dispatched (${updatedPo.trackingNumber})`,
+    userName
+  );
+
+  return updatedPo;
+}
+
+/**
+ * Categories CRUD
+ */
+export async function addCategory(categoryData, userId = DEFAULT_USER_ID) {
+  const uid = userId || DEFAULT_USER_ID;
+  const clean = {
+    userId: uid,
+    name: categoryData.name.trim(),
+    slug: categoryData.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+    icon: categoryData.icon || 'Coffee',
+    description: categoryData.description ? categoryData.description.trim() : '',
+  };
+
+  const newId = 'cat-' + Date.now() + '-' + Math.random().toString(36).substring(2, 5);
+
+  if (isFirebaseConfigured() && db) {
+    try {
+      await setDoc(doc(db, 'categories', newId), {
+        ...clean,
+        id: newId,
+        createdAt: serverTimestamp(),
+      });
+    } catch (e) {
+      console.warn('Notice adding category:', e.message);
+    }
+  }
+
+  const catsKey = getLocalCategoriesKey(uid);
+  const categories = getLocalData(catsKey, INITIAL_CATEGORIES);
+  const newCat = {
+    id: newId,
+    ...clean,
+    createdAt: new Date().toISOString(),
+  };
+  const updatedCats = [newCat, ...categories];
+  setLocalData(catsKey, updatedCats);
+  bus.emit(`categories_${uid}`, updatedCats);
+
+  logActivity(uid, 'CATEGORY_CREATED', newId, clean.name, `Created category taxonomy "${clean.name}"`, 'Café Admin');
+  return newCat;
+}
+
+export async function updateCategory(id, updatedData, userId = DEFAULT_USER_ID) {
+  const uid = userId || DEFAULT_USER_ID;
+  const clean = {
+    ...updatedData,
+    slug: updatedData.name ? updatedData.name.toLowerCase().replace(/[^a-z0-9]+/g, '-') : undefined,
+  };
+
+  if (isFirebaseConfigured() && db) {
+    try {
+      await updateDoc(doc(db, 'categories', id), {
+        ...clean,
+        updatedAt: serverTimestamp(),
+      });
+    } catch (e) {
+      console.warn('Notice updating category:', e.message);
+    }
+  }
+
+  const catsKey = getLocalCategoriesKey(uid);
+  const categories = getLocalData(catsKey, INITIAL_CATEGORIES);
+  const updatedCats = categories.map((c) => (c.id === id ? { ...c, ...clean, updatedAt: new Date().toISOString() } : c));
+  setLocalData(catsKey, updatedCats);
+  bus.emit(`categories_${uid}`, updatedCats);
+}
+
+export async function deleteCategory(id, userId = DEFAULT_USER_ID) {
+  const uid = userId || DEFAULT_USER_ID;
+
+  if (isFirebaseConfigured() && db) {
+    try {
+      await deleteDoc(doc(db, 'categories', id));
+    } catch (e) {
+      console.warn('Notice deleting category:', e.message);
+    }
+  }
+
+  const catsKey = getLocalCategoriesKey(uid);
+  const categories = getLocalData(catsKey, INITIAL_CATEGORIES);
+  const targetCat = categories.find((c) => c.id === id);
+  const updatedCats = categories.filter((c) => c.id !== id);
+  setLocalData(catsKey, updatedCats);
+  bus.emit(`categories_${uid}`, updatedCats);
+
+  if (targetCat) {
+    logActivity(uid, 'CATEGORY_DELETED', id, targetCat.name, `Deleted category taxonomy "${targetCat.name}"`, 'Café Admin');
+  }
+}
+
 /**
  * Subscribe to all registered cafés in the network for Wholesale Suppliers
  */
 export function subscribeToAllRegisteredCafes(callback) {
-  const compileCafes = () => {
+  const compileCafes = (firestoreUsers = null, firestoreItems = null, firestorePos = null) => {
     let cafesList = [];
+    const seenIds = new Set();
     const seenNames = new Set();
 
+    // 1. Gather from Firestore if available
+    if (Array.isArray(firestoreUsers)) {
+      firestoreUsers.forEach((u) => {
+        if (!u || !u.uid) return;
+        const storeName = u.cafeName || u.displayName || 'Specialty Café';
+        const branch = u.branchName || 'Main Branch';
+        const userItems = (firestoreItems || []).filter((i) => i.userId === u.uid);
+        const userPos = (firestorePos || []).filter((p) => p.userId === u.uid);
+
+        const demands = userItems.map((item) => ({
+          itemId: item.id,
+          itemName: item.name,
+          monthlyQty: Number(item.parLevel) || 20,
+          unit: item.unit || 'packs',
+          targetBudget: Number(item.unitPrice) > 0 ? `₹${Number(item.unitPrice).toLocaleString('en-IN')} / ${item.unit || 'pack'}` : 'Open Quote',
+          isUrgent: Number(item.quantity) <= (Number(item.reorderLevel) || 5),
+          currentStock: Number(item.quantity) || 0,
+          reorderLevel: item.reorderLevel || 5,
+          sku: item.sku || '',
+        }));
+
+        const totalVal = userItems.reduce(
+          (acc, i) => acc + (Number(i.quantity) || 0) * (Number(i.unitPrice) || 0),
+          0
+        );
+
+        seenIds.add(u.uid);
+        seenNames.add(storeName.toLowerCase());
+        cafesList.push({
+          id: u.uid,
+          name: storeName,
+          branchName: branch,
+          city: u.city || 'Bengaluru',
+          state: u.state || 'Karnataka',
+          address: u.address || `${branch}, Bengaluru, Karnataka`,
+          badge: 'Live Connected Store',
+          monthlyOrdersCount: userPos.length,
+          managerName: u.displayName || 'Store Operations Lead',
+          managerPhone: u.phone || '+91 80 4000 8000',
+          activeDemands: demands,
+          monthlyVolumeEstimate: totalVal > 0 ? `₹${totalVal.toLocaleString('en-IN')} / mo` : '₹0 / mo',
+        });
+      });
+    }
+
+    // 2. Gather from LocalStorage registry & session
     if (typeof window !== 'undefined') {
       try {
-        // 1. Current active user store
+        const regCafes = JSON.parse(localStorage.getItem('cafepulse_registered_cafes') || '[]');
         const u = JSON.parse(localStorage.getItem('cafepulse_user_session') || '{}');
+
+        const allLocalSources = [...regCafes];
         if (u && u.uid && (u.cafeName || u.role === 'admin')) {
-          const storeName = u.cafeName || 'My Café';
-          const branch = u.branchName || 'Main Branch';
-          const itemsKey = `cafepulse_items_${u.uid}`;
-          const storeItems = getLocalData(itemsKey, []);
-          const posKey = `cafepulse_pos_${u.uid}`;
-          const storePos = getLocalData(posKey, []);
-
-          const storeEntry = {
+          allLocalSources.push({
             id: u.uid,
-            name: storeName,
-            branchName: branch,
-            city: 'Bengaluru',
-            state: 'Karnataka',
-            address: `${branch}, Bengaluru, Karnataka`,
-            badge: 'Live Connected Store',
-            monthlyOrdersCount: storePos.length,
+            name: u.cafeName || 'My Café',
+            branchName: u.branchName || 'Main Branch',
             managerName: u.displayName || 'Store Operations Lead',
-            managerPhone: '+91 80 4000 8000',
-            activeDemands: (storeItems || []).map((item) => {
-              const par = Number(item.parLevel) || 20;
-              const qty = Number(item.quantity) || 0;
-              const price = Number(item.unitPrice) || 0;
-              const isUrgent = qty <= (Number(item.reorderLevel) || 5);
-              return {
-                itemId: item.id,
-                itemName: item.name,
-                monthlyQty: Math.max(1, par),
-                unit: item.unit || 'packs',
-                targetBudget: price > 0 ? `₹${price.toLocaleString('en-IN')} / ${item.unit || 'pack'}` : 'Open Quote',
-                isUrgent,
-                currentStock: qty,
-                reorderLevel: item.reorderLevel || 5,
-                sku: item.sku || '',
-              };
-            }),
-            monthlyVolumeEstimate: (() => {
-              const totalVal = (storeItems || []).reduce(
-                (acc, i) => acc + (Number(i.quantity) || 0) * (Number(i.unitPrice) || 0),
-                0
-              );
-              return totalVal > 0 ? `₹${totalVal.toLocaleString('en-IN')} / mo` : '₹0 / mo';
-            })(),
-          };
-
-          seenNames.add(storeName.toLowerCase());
-          cafesList.push(storeEntry);
+          });
         }
 
-        // 2. Add other registered cafés from localStorage keys
+        // Also scan any localStorage items keys (e.g. cafepulse_items_user-123)
         for (let i = 0; i < localStorage.length; i++) {
           const k = localStorage.key(i);
-          if (k && k.startsWith('cafepulse_items_') && !k.endsWith(u?.uid || 'NONE')) {
+          if (k && k.startsWith('cafepulse_items_')) {
             const uidKey = k.replace('cafepulse_items_', '');
-            const items = getLocalData(k, []);
-            const cafeName = `Registered Café (${uidKey.slice(0, 6).toUpperCase()})`;
-            if (!seenNames.has(cafeName.toLowerCase()) && items.length > 0) {
-              seenNames.add(cafeName.toLowerCase());
-              cafesList.push({
-                id: uidKey,
-                name: cafeName,
-                branchName: 'Store Hub',
-                city: 'Bengaluru',
-                state: 'Karnataka',
-                address: 'Network Store Branch',
-                badge: 'Active Partner Store',
-                monthlyOrdersCount: 0,
-                managerName: 'Store Manager',
-                managerPhone: '+91 80 4000 0000',
-                activeDemands: items.map((item) => ({
-                  itemId: item.id,
-                  itemName: item.name,
-                  monthlyQty: Number(item.parLevel) || 20,
-                  unit: item.unit || 'packs',
-                  targetBudget: Number(item.unitPrice) > 0 ? `₹${Number(item.unitPrice).toLocaleString('en-IN')} / ${item.unit || 'pack'}` : 'Open Quote',
-                  isUrgent: Number(item.quantity) <= (Number(item.reorderLevel) || 5),
-                  currentStock: Number(item.quantity) || 0,
-                  reorderLevel: item.reorderLevel || 5,
-                  sku: item.sku || '',
-                })),
-                monthlyVolumeEstimate: (() => {
-                  const totalVal = (items || []).reduce(
-                    (acc, i) => acc + (Number(i.quantity) || 0) * (Number(i.unitPrice) || 0),
-                    0
-                  );
-                  return totalVal > 0 ? `₹${totalVal.toLocaleString('en-IN')} / mo` : '₹0 / mo';
-                })(),
-              });
-            }
+            allLocalSources.push({
+              id: uidKey,
+              name: `Registered Café (${uidKey.slice(0, 6).toUpperCase()})`,
+              branchName: 'Store Hub',
+              managerName: 'Store Operations Lead',
+            });
           }
         }
+
+        allLocalSources.forEach((entry) => {
+          if (!entry || !entry.id) return;
+          if (seenIds.has(entry.id)) return;
+          const storeName = entry.name || 'Specialty Café';
+          if (seenNames.has(storeName.toLowerCase())) return;
+
+          const storeItems = getLocalData(`cafepulse_items_${entry.id}`, []);
+          const storePos = getLocalData(`cafepulse_pos_${entry.id}`, []);
+
+          const demands = storeItems.map((item) => ({
+            itemId: item.id,
+            itemName: item.name,
+            monthlyQty: Number(item.parLevel) || 20,
+            unit: item.unit || 'packs',
+            targetBudget: Number(item.unitPrice) > 0 ? `₹${Number(item.unitPrice).toLocaleString('en-IN')} / ${item.unit || 'pack'}` : 'Open Quote',
+            isUrgent: Number(item.quantity) <= (Number(item.reorderLevel) || 5),
+            currentStock: Number(item.quantity) || 0,
+            reorderLevel: item.reorderLevel || 5,
+            sku: item.sku || '',
+          }));
+
+          const totalVal = storeItems.reduce(
+            (acc, i) => acc + (Number(i.quantity) || 0) * (Number(i.unitPrice) || 0),
+            0
+          );
+
+          seenIds.add(entry.id);
+          seenNames.add(storeName.toLowerCase());
+          cafesList.push({
+            id: entry.id,
+            name: storeName,
+            branchName: entry.branchName || 'Main Branch',
+            city: entry.city || 'Bengaluru',
+            state: entry.state || 'Karnataka',
+            address: entry.address || `${entry.branchName || 'Main Branch'}, Bengaluru, Karnataka`,
+            badge: 'Live Connected Store',
+            monthlyOrdersCount: storePos.length,
+            managerName: entry.managerName || 'Store Operations Lead',
+            managerPhone: entry.managerPhone || '+91 80 4000 8000',
+            activeDemands: demands,
+            monthlyVolumeEstimate: totalVal > 0 ? `₹${totalVal.toLocaleString('en-IN')} / mo` : '₹0 / mo',
+          });
+        });
       } catch (e) {}
     }
 
@@ -1321,26 +1507,44 @@ export function subscribeToAllRegisteredCafes(callback) {
 
   compileCafes();
 
-  let unsubscribeFirestore = () => {};
+  let unsubUsers = () => {};
+  let unsubItems = () => {};
+  let unsubPos = () => {};
+
   if (isFirebaseConfigured() && db) {
     try {
-      unsubscribeFirestore = onSnapshot(
-        collection(db, 'users'),
-        (snapshot) => {
-          if (!snapshot.empty) {
-            compileCafes();
-          }
-        },
-        (e) => {}
-      );
+      let cachedUsers = [];
+      let cachedItems = [];
+      let cachedPos = [];
+
+      unsubUsers = onSnapshot(collection(db, 'users'), (snap) => {
+        cachedUsers = snap.docs.map((d) => ({ ...d.data(), uid: d.id }));
+        compileCafes(cachedUsers, cachedItems, cachedPos);
+      });
+
+      unsubItems = onSnapshot(collection(db, 'inventory_items'), (snap) => {
+        cachedItems = snap.docs.map((d) => ({ ...d.data(), id: d.id }));
+        compileCafes(cachedUsers, cachedItems, cachedPos);
+      });
+
+      unsubPos = onSnapshot(collection(db, 'purchase_orders'), (snap) => {
+        cachedPos = snap.docs.map((d) => ({ ...d.data(), id: d.id }));
+        compileCafes(cachedUsers, cachedItems, cachedPos);
+      });
     } catch (e) {}
   }
 
-  const busUnsub = bus.on('cafes_updated', compileCafes);
+  const busUnsub = bus.on('cafes_updated', () => compileCafes());
+  const busItems = bus.on('all_items_updated', () => compileCafes());
+  const busPos = bus.on('all_pos_updated', () => compileCafes());
 
   return () => {
-    unsubscribeFirestore();
+    unsubUsers();
+    unsubItems();
+    unsubPos();
     busUnsub();
+    busItems();
+    busPos();
   };
 }
 

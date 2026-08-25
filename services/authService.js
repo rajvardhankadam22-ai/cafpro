@@ -41,6 +41,29 @@ class AuthEventBus {
 
 const authBus = new AuthEventBus();
 
+export function registerCafeInDirectory(userData) {
+  if (typeof window === 'undefined' || !userData || !userData.uid) return;
+  try {
+    const list = JSON.parse(localStorage.getItem('cafepulse_registered_cafes') || '[]');
+    const cleanEntry = {
+      id: userData.uid,
+      name: userData.cafeName || 'Specialty Artisan Café',
+      branchName: userData.branchName || 'Main Branch',
+      city: 'Bengaluru',
+      state: 'Karnataka',
+      address: `${userData.branchName || 'Main Branch'}, Bengaluru, Karnataka`,
+      email: userData.email || '',
+      displayName: userData.displayName || '',
+      managerName: userData.displayName || 'Store Operations Lead',
+      managerPhone: '+91 80 4000 8000',
+      badge: 'Live Connected Store',
+      registeredAt: new Date().toISOString(),
+    };
+    const updated = [cleanEntry, ...list.filter((c) => c.id !== cleanEntry.id && c.name.toLowerCase() !== cleanEntry.name.toLowerCase())];
+    localStorage.setItem('cafepulse_registered_cafes', JSON.stringify(updated));
+  } catch (e) {}
+}
+
 export function getCurrentUser() {
   if (typeof window === 'undefined') return null;
   try {
@@ -55,6 +78,7 @@ export function subscribeToAuth(callback) {
   // 1. Immediately deliver stored session if present for zero-lag UI transition
   const cachedUser = getCurrentUser();
   if (cachedUser) {
+    registerCafeInDirectory(cachedUser);
     callback(cachedUser);
   }
 
@@ -272,6 +296,7 @@ export async function loginWithEmail(email, password) {
         isRoleLocked: false,
         photoURL: user.photoURL || null,
       };
+      registerCafeInDirectory(enrichedUser);
       localStorage.setItem(LOCAL_AUTH_KEY, JSON.stringify(enrichedUser));
       authBus.emit(enrichedUser);
       return enrichedUser;
@@ -294,6 +319,7 @@ export async function loginWithEmail(email, password) {
     branchName: 'Main Flagship Branch',
     photoURL: null,
   };
+  registerCafeInDirectory(user);
   localStorage.setItem(LOCAL_AUTH_KEY, JSON.stringify(user));
   authBus.emit(user);
   return user;
@@ -444,6 +470,7 @@ export async function signupWithEmail(email, password, displayName = '', cafeNam
       localStorage.setItem(`cafepulse_logs_${cleanUid}`, '[]');
       localStorage.setItem(`cafepulse_supplier_apps_${cleanUid}`, '[]');
 
+      registerCafeInDirectory(enrichedUser);
       localStorage.setItem(LOCAL_AUTH_KEY, JSON.stringify(enrichedUser));
       authBus.emit(enrichedUser);
       return enrichedUser;
@@ -473,6 +500,7 @@ export async function signupWithEmail(email, password, displayName = '', cafeNam
   localStorage.setItem(`cafepulse_logs_${cleanUid}`, '[]');
   localStorage.setItem(`cafepulse_supplier_apps_${cleanUid}`, '[]');
 
+  registerCafeInDirectory(user);
   localStorage.setItem(LOCAL_AUTH_KEY, JSON.stringify(user));
   authBus.emit(user);
   return user;
@@ -517,6 +545,7 @@ export async function loginWithGoogle() {
         ).catch(() => {});
       }
 
+      registerCafeInDirectory(enrichedUser);
       localStorage.setItem(LOCAL_AUTH_KEY, JSON.stringify(enrichedUser));
       authBus.emit(enrichedUser);
       return enrichedUser;
