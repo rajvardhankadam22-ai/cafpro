@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -23,6 +23,8 @@ import {
   FileText,
   User,
   ArrowRight,
+  ChevronDown,
+  Check,
 } from 'lucide-react';
 import { useDashboard } from '../layout';
 import { formatDate, formatCurrency } from '@/lib/utils';
@@ -35,6 +37,20 @@ export default function HistoryAuditPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedType, setSelectedType] = useState('ALL'); // 'ALL' | 'RESTOCKED' | 'QUANTITY_ADJUSTED' | 'CREATED' | 'UPDATED' | 'DELETED'
   const [selectedRange, setSelectedRange] = useState('ALL'); // 'ALL' | 'TODAY' | 'WEEK' | 'MONTH'
+  const [isRangeOpen, setIsRangeOpen] = useState(false);
+  const rangeRef = useRef(null);
+
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (rangeRef.current && !rangeRef.current.contains(e.target)) {
+        setIsRangeOpen(false);
+      }
+    }
+    if (isRangeOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isRangeOpen]);
 
   const filteredLogs = activityLogs.filter((log) => {
     const matchesSearch =
@@ -243,20 +259,69 @@ export default function HistoryAuditPage() {
           })}
         </div>
 
-        {/* Date Filter & Search */}
+        {/* Custom Date Range Dropdown & Count */}
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1.5 bg-cafe-50 dark:bg-espresso-900/60 px-3 py-1.5 rounded-xl border border-cafe-200 dark:border-espresso-700">
-            <Calendar className="w-3.5 h-3.5 text-caramel-600" />
-            <select
-              value={selectedRange}
-              onChange={(e) => setSelectedRange(e.target.value)}
-              className="bg-transparent text-xs font-semibold text-espresso-800 dark:text-cafe-200 outline-none cursor-pointer"
+          <div className="relative" ref={rangeRef}>
+            <button
+              type="button"
+              onClick={() => setIsRangeOpen(!isRangeOpen)}
+              className="flex items-center gap-2 bg-cafe-50 dark:bg-espresso-900/80 hover:bg-cafe-100 dark:hover:bg-espresso-800 px-3.5 py-2 rounded-xl border border-cafe-200 dark:border-espresso-700 hover:border-caramel-500 dark:hover:border-caramel-500 text-xs font-bold text-espresso-900 dark:text-cafe-100 shadow-xs transition-all active:scale-98"
             >
-              <option value="ALL">All Time</option>
-              <option value="TODAY">Today Only</option>
-              <option value="WEEK">Last 7 Days</option>
-              <option value="MONTH">Last 30 Days</option>
-            </select>
+              <Calendar className="w-3.5 h-3.5 text-caramel-600 dark:text-caramel-400 shrink-0" />
+              <span>
+                {selectedRange === 'TODAY'
+                  ? 'Today Only'
+                  : selectedRange === 'WEEK'
+                  ? 'Last 7 Days'
+                  : selectedRange === 'MONTH'
+                  ? 'Last 30 Days'
+                  : 'All Time'}
+              </span>
+              <ChevronDown
+                className={`w-3.5 h-3.5 text-espresso-400 dark:text-cafe-400 transition-transform duration-200 ${
+                  isRangeOpen ? 'rotate-180 text-caramel-600 dark:text-caramel-400' : ''
+                }`}
+              />
+            </button>
+
+            <AnimatePresence>
+              {isRangeOpen && (
+                <motion.div
+                  initial={{ opacity: 0, y: 6, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 6, scale: 0.95 }}
+                  transition={{ duration: 0.15 }}
+                  className="absolute right-0 top-full mt-2 w-44 rounded-2xl bg-white dark:bg-[#181310] border border-cafe-200 dark:border-espresso-700 shadow-cafe-lg z-50 p-1.5 backdrop-blur-xl"
+                >
+                  {[
+                    { value: 'ALL', label: 'All Time' },
+                    { value: 'TODAY', label: 'Today Only' },
+                    { value: 'WEEK', label: 'Last 7 Days' },
+                    { value: 'MONTH', label: 'Last 30 Days' },
+                  ].map((opt) => {
+                    const isSelected = selectedRange === opt.value;
+                    return (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => {
+                          setSelectedRange(opt.value);
+                          setIsRangeOpen(false);
+                        }}
+                        className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition-colors text-left ${
+                          isSelected
+                            ? 'bg-caramel-50 dark:bg-caramel-950/60 text-caramel-700 dark:text-caramel-300 font-bold'
+                            : 'text-espresso-700 dark:text-cafe-200 hover:bg-cafe-50 dark:hover:bg-espresso-800/80 hover:text-espresso-950 dark:hover:text-white'
+                        }`}
+                      >
+                        <span>{opt.label}</span>
+                        {isSelected && <Check className="w-3.5 h-3.5 text-caramel-600 dark:text-caramel-400" />}
+                      </button>
+                    );
+                  })}
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
 
           <span className="text-xs font-semibold text-espresso-500 dark:text-cafe-400">

@@ -1,5 +1,5 @@
-import { initializeApp } from 'firebase/app';
-import { getFirestore, doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { db } from './firebaseClient.mjs';
 import {
   INITIAL_INVENTORY_ITEMS,
   INITIAL_CATEGORIES,
@@ -8,20 +8,7 @@ import {
   INITIAL_STAFF_MEMBERS,
 } from '../services/seedData.js';
 
-const firebaseConfig = {
-  apiKey: "AIzaSyAxw-OtFwqwAGETyZkdq10Cz1Stspfy_D4",
-  authDomain: "caf247-73960.firebaseapp.com",
-  projectId: "caf247-73960",
-  storageBucket: "caf247-73960.firebasestorage.app",
-  messagingSenderId: "486109709317",
-  appId: "1:486109709317:web:fc2ec53a141764db43886c",
-  measurementId: "G-RRMTQ1L5QK"
-};
-
 async function syncAllCollections() {
-  const app = initializeApp(firebaseConfig);
-  const db = getFirestore(app);
-
   const demoUid = 'demo-cafe-mgr-01';
 
   console.log('=== SEEDING & SYNCHRONIZING ALL COLLECTIONS TO CLOUD FIRESTORE ===');

@@ -14,7 +14,7 @@ import {
   Mail,
   MapPin,
   Tag,
-  DollarSign,
+  IndianRupee,
   Send,
   FileText,
   Search,
@@ -1277,7 +1277,7 @@ export default function SupplierPortalPage() {
                       Quoted Price (₹/{quotingDemand.demand.unit}) *
                     </label>
                     <div className="relative">
-                      <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-espresso-500" />
+                      <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-espresso-500" />
                       <input
                         type="number"
                         step="0.01"

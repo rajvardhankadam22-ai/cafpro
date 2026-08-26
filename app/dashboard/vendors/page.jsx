@@ -23,7 +23,7 @@ import {
   ShieldCheck,
   Layers,
   Sparkles,
-  DollarSign,
+  IndianRupee,
   X,
   CheckCircle2,
   TrendingDown,

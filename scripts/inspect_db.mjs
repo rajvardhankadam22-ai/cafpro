@@ -1,18 +1,5 @@
-import { initializeApp } from 'firebase/app';
-import { getFirestore, collection, getDocs } from 'firebase/firestore';
-
-const firebaseConfig = {
-  apiKey: "AIzaSyAxw-OtFwqwAGETyZkdq10Cz1Stspfy_D4",
-  authDomain: "caf247-73960.firebaseapp.com",
-  projectId: "caf247-73960",
-  storageBucket: "caf247-73960.firebasestorage.app",
-  messagingSenderId: "486109709317",
-  appId: "1:486109709317:web:fc2ec53a141764db43886c",
-  measurementId: "G-RRMTQ1L5QK",
-};
-
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
+import { collection, getDocs } from 'firebase/firestore';
+import { db } from './firebaseClient.mjs';
 
 console.log('--- Inspecting Firestore Collections ---');
 

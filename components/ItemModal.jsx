@@ -8,7 +8,7 @@ import {
   Edit3,
   Coffee,
   Package,
-  DollarSign,
+  IndianRupee,
   AlertTriangle,
   Building,
   FileText,
@@ -364,7 +364,7 @@ export default function ItemModal({
                     className="w-full px-2 py-2 rounded-xl text-xs font-bold bg-cafe-50 dark:bg-espresso-900/50 border border-cafe-200 dark:border-espresso-700 text-espresso-900 dark:text-cafe-50 outline-none"
                   >
                     {UNIT_OPTIONS.map((u) => (
-                      <option key={u.value} value={u.value}>
+                      <option key={u.value} value={u.value} className="bg-white dark:bg-[#1C1612] text-espresso-950 dark:text-cafe-100">
                         {u.label}
                       </option>
                     ))}
@@ -419,13 +419,13 @@ export default function ItemModal({
                       <select
                         value={formData.packageWeightUnit}
                         onChange={(e) => setFormData({ ...formData, packageWeightUnit: e.target.value })}
-                        className="px-2 py-2 rounded-r-xl text-xs font-bold bg-caramel-100 dark:bg-espresso-700 border-y border-r border-caramel-200 dark:border-espresso-700 text-espresso-800 dark:text-cafe-200 outline-none"
+                        className="px-2 py-2 rounded-r-xl text-xs font-bold bg-caramel-100 dark:bg-espresso-700 border-y border-r border-caramel-200 dark:border-espresso-700 text-espresso-800 dark:text-cafe-200 outline-none cursor-pointer"
                       >
-                        <option value="kg">kg</option>
-                        <option value="g">g</option>
-                        <option value="L">L</option>
-                        <option value="ml">ml</option>
-                        <option value="units">units</option>
+                        <option value="kg" className="bg-white dark:bg-[#1C1612] text-espresso-950 dark:text-cafe-100">kg</option>
+                        <option value="g" className="bg-white dark:bg-[#1C1612] text-espresso-950 dark:text-cafe-100">g</option>
+                        <option value="L" className="bg-white dark:bg-[#1C1612] text-espresso-950 dark:text-cafe-100">L</option>
+                        <option value="ml" className="bg-white dark:bg-[#1C1612] text-espresso-950 dark:text-cafe-100">ml</option>
+                        <option value="units" className="bg-white dark:bg-[#1C1612] text-espresso-950 dark:text-cafe-100">units</option>
                       </select>
                     </div>
                     <p className="text-[9px] text-espresso-500 mt-0.5">e.g. 1 kg bag, 250g pouch, 750ml bottle</p>

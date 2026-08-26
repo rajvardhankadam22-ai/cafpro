@@ -1517,7 +1517,7 @@ export function subscribeToAllRegisteredCafes(callback) {
       let cachedItems = [];
       let cachedPos = [];
 
-      unsubUsers = onSnapshot(collection(db, 'users'), (snap) => {
+      unsubUsers = onSnapshot(collection(db, 'registered_cafes'), (snap) => {
         cachedUsers = snap.docs.map((d) => ({ ...d.data(), uid: d.id }));
         compileCafes(cachedUsers, cachedItems, cachedPos);
       });
@@ -2313,7 +2313,7 @@ export function subscribeToRegisteredCafes(callback) {
   if (isFirebaseConfigured() && db) {
     try {
       const unsubFirestore = onSnapshot(
-        collection(db, 'users'),
+        collection(db, 'registered_cafes'),
         (snapshot) => {
           const loadedCafes = [];
           const seenUids = new Set();
@@ -2326,15 +2326,15 @@ export function subscribeToRegisteredCafes(callback) {
               loadedCafes.push({
                 id: uUid,
                 uid: uUid,
-                name: data.cafeName || (data.displayName ? `${data.displayName}'s Café` : 'Artisan Café'),
+                name: data.name || data.cafeName || (data.displayName ? `${data.displayName}'s Café` : 'Artisan Café'),
                 branchName: data.branchName || 'Main Branch',
-                city: data.city || 'Direct Sourcing',
+                city: data.city || 'Bengaluru',
                 address: data.address || `${data.branchName || 'Store'} Location`,
-                managerName: data.displayName || data.email?.split('@')[0] || 'Store Administrator',
-                monthlyVolumeEstimate: data.monthlyVolume || 'Active Café',
-                monthlyOrdersCount: 0,
-                badge: 'Registered Café',
-                activeDemands: [],
+                managerName: data.managerName || data.displayName || data.email?.split('@')[0] || 'Store Administrator',
+                monthlyVolumeEstimate: data.monthlyVolumeEstimate || data.monthlyVolume || 'Active Café',
+                monthlyOrdersCount: data.monthlyOrdersCount || 0,
+                badge: data.badge || 'Registered Café',
+                activeDemands: data.activeDemands || [],
               });
             }
           });

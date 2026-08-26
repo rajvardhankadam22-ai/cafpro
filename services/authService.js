@@ -47,6 +47,7 @@ export function registerCafeInDirectory(userData) {
     const list = JSON.parse(localStorage.getItem('cafepulse_registered_cafes') || '[]');
     const cleanEntry = {
       id: userData.uid,
+      uid: userData.uid,
       name: userData.cafeName || 'Specialty Artisan Café',
       branchName: userData.branchName || 'Main Branch',
       city: 'Bengaluru',
@@ -61,6 +62,10 @@ export function registerCafeInDirectory(userData) {
     };
     const updated = [cleanEntry, ...list.filter((c) => c.id !== cleanEntry.id && c.name.toLowerCase() !== cleanEntry.name.toLowerCase())];
     localStorage.setItem('cafepulse_registered_cafes', JSON.stringify(updated));
+
+    if (isFirebaseConfigured() && db && userData.uid) {
+      setDoc(doc(db, 'registered_cafes', userData.uid), cleanEntry, { merge: true }).catch(() => {});
+    }
   } catch (e) {}
 }
 

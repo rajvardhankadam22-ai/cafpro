@@ -17,8 +17,19 @@ export function ToastProvider({ children }) {
   const [toasts, setToasts] = useState([]);
 
   const addToast = useCallback((type, message, title) => {
+    const safeMessage =
+      typeof message === 'string'
+        ? message
+        : message?.message
+        ? String(message.message)
+        : message !== null && message !== undefined
+        ? String(message)
+        : 'Action completed';
+
+    const safeTitle = typeof title === 'string' ? title : 'Notification';
+
     const id = 'toast-' + Date.now() + '-' + Math.random().toString(36).substring(2, 5);
-    setToasts((prev) => [...prev, { id, type, message, title }]);
+    setToasts((prev) => [...prev, { id, type, message: safeMessage, title: safeTitle }]);
 
     setTimeout(() => {
       setToasts((prev) => prev.filter((t) => t.id !== id));

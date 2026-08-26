@@ -16,7 +16,7 @@ import {
   Edit3,
   Trash2,
   Package,
-  DollarSign,
+  IndianRupee,
   ArrowRight,
 } from 'lucide-react';
 import { useDashboard } from '../layout';

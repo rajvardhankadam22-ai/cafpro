@@ -26,6 +26,9 @@ import {
   Sparkles,
   ShieldAlert,
   ArrowRight,
+  ChevronDown,
+  Check,
+  MapPin,
 } from 'lucide-react';
 import { useDashboard } from '../layout';
 import { REGISTERED_CAFES } from '@/services/seedData';
@@ -49,6 +52,26 @@ export default function TeamPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedRoleFilter, setSelectedRoleFilter] = useState('ALL');
   const [selectedBranchFilter, setSelectedBranchFilter] = useState('ALL');
+  const [isRoleMenuOpen, setIsRoleMenuOpen] = useState(false);
+  const [isBranchMenuOpen, setIsBranchMenuOpen] = useState(false);
+  const roleMenuRef = React.useRef(null);
+  const branchMenuRef = React.useRef(null);
+
+  React.useEffect(() => {
+    function handleClickOutside(e) {
+      if (roleMenuRef.current && !roleMenuRef.current.contains(e.target)) {
+        setIsRoleMenuOpen(false);
+      }
+      if (branchMenuRef.current && !branchMenuRef.current.contains(e.target)) {
+        setIsBranchMenuOpen(false);
+      }
+    }
+    if (isRoleMenuOpen || isBranchMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isRoleMenuOpen, isBranchMenuOpen]);
+
   const [visiblePins, setVisiblePins] = useState({});
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -220,34 +243,147 @@ export default function TeamPage() {
         </div>
 
         <div className="flex flex-wrap gap-2 w-full sm:w-auto">
-          {/* Role Filter */}
-          <select
-            value={selectedRoleFilter}
-            onChange={(e) => setSelectedRoleFilter(e.target.value)}
-            className="px-3 py-2 text-xs font-bold bg-white dark:bg-espresso-800 border border-cafe-200 dark:border-espresso-700 rounded-xl text-espresso-800 dark:text-cafe-100 outline-none shadow-sm"
-          >
-            <option value="ALL">All Roles</option>
-            <option value="admin">Store Admin & General Manager</option>
-            <option value="manager">Assistant Manager & Inventory Lead</option>
-            <option value="head_barista">Head Barista & Shift Lead</option>
-            <option value="barista">Shift Barista (Floor POS)</option>
-            <option value="auditor">Inventory & COGS Auditor</option>
-          </select>
+          {/* Custom Role Filter Dropdown */}
+          <div className="relative" ref={roleMenuRef}>
+            <button
+              type="button"
+              onClick={() => {
+                setIsRoleMenuOpen(!isRoleMenuOpen);
+                setIsBranchMenuOpen(false);
+              }}
+              className="flex items-center gap-2 bg-white dark:bg-[#1C1612] hover:bg-cafe-50 dark:hover:bg-espresso-800/80 px-3.5 py-2 rounded-xl border border-cafe-200 dark:border-espresso-700 hover:border-caramel-500 dark:hover:border-caramel-500 text-xs font-bold text-espresso-900 dark:text-cafe-100 shadow-xs transition-all active:scale-98"
+            >
+              <Shield className="w-3.5 h-3.5 text-caramel-600 dark:text-caramel-400 shrink-0" />
+              <span>
+                {selectedRoleFilter === 'ALL'
+                  ? 'All Roles'
+                  : selectedRoleFilter === 'admin'
+                  ? 'Store Admin & General Manager'
+                  : selectedRoleFilter === 'manager'
+                  ? 'Assistant Manager & Inventory Lead'
+                  : selectedRoleFilter === 'head_barista'
+                  ? 'Head Barista & Shift Lead'
+                  : selectedRoleFilter === 'barista'
+                  ? 'Shift Barista (Floor POS)'
+                  : selectedRoleFilter === 'auditor'
+                  ? 'Inventory & COGS Auditor'
+                  : selectedRoleFilter}
+              </span>
+              <ChevronDown
+                className={`w-3.5 h-3.5 text-espresso-400 dark:text-cafe-400 transition-transform duration-200 ${
+                  isRoleMenuOpen ? 'rotate-180 text-caramel-600 dark:text-caramel-400' : ''
+                }`}
+              />
+            </button>
 
-          {/* Branch Filter */}
-          <select
-            value={selectedBranchFilter}
-            onChange={(e) => setSelectedBranchFilter(e.target.value)}
-            className="px-3 py-2 text-xs font-bold bg-white dark:bg-espresso-800 border border-cafe-200 dark:border-espresso-700 rounded-xl text-espresso-800 dark:text-cafe-100 outline-none shadow-sm"
-          >
-            <option value="ALL">All Branches</option>
-            <option value="All Branches (Network)">Network Wide</option>
-            {REGISTERED_CAFES.map((c) => (
-              <option key={c.id} value={c.name}>
-                {c.name.split(' - ')[1] || c.name}
-              </option>
-            ))}
-          </select>
+            <AnimatePresence>
+              {isRoleMenuOpen && (
+                <motion.div
+                  initial={{ opacity: 0, y: 6, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 6, scale: 0.95 }}
+                  transition={{ duration: 0.15 }}
+                  className="absolute left-0 sm:right-0 sm:left-auto top-full mt-2 w-64 rounded-2xl bg-white dark:bg-[#181310] border border-cafe-200 dark:border-espresso-700 shadow-cafe-lg z-50 p-1.5 backdrop-blur-xl"
+                >
+                  {[
+                    { value: 'ALL', label: 'All Roles' },
+                    { value: 'admin', label: 'Store Admin & General Manager' },
+                    { value: 'manager', label: 'Assistant Manager & Inventory Lead' },
+                    { value: 'head_barista', label: 'Head Barista & Shift Lead' },
+                    { value: 'barista', label: 'Shift Barista (Floor POS)' },
+                    { value: 'auditor', label: 'Inventory & COGS Auditor' },
+                  ].map((opt) => {
+                    const isSelected = selectedRoleFilter === opt.value;
+                    return (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => {
+                          setSelectedRoleFilter(opt.value);
+                          setIsRoleMenuOpen(false);
+                        }}
+                        className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition-colors text-left ${
+                          isSelected
+                            ? 'bg-caramel-50 dark:bg-caramel-950/60 text-caramel-700 dark:text-caramel-300 font-bold'
+                            : 'text-espresso-700 dark:text-cafe-200 hover:bg-cafe-50 dark:hover:bg-espresso-800/80 hover:text-espresso-950 dark:hover:text-white'
+                        }`}
+                      >
+                        <span>{opt.label}</span>
+                        {isSelected && <Check className="w-3.5 h-3.5 text-caramel-600 dark:text-caramel-400 shrink-0 ml-2" />}
+                      </button>
+                    );
+                  })}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
+          {/* Custom Branch Filter Dropdown */}
+          <div className="relative" ref={branchMenuRef}>
+            <button
+              type="button"
+              onClick={() => {
+                setIsBranchMenuOpen(!isBranchMenuOpen);
+                setIsRoleMenuOpen(false);
+              }}
+              className="flex items-center gap-2 bg-white dark:bg-[#1C1612] hover:bg-cafe-50 dark:hover:bg-espresso-800/80 px-3.5 py-2 rounded-xl border border-cafe-200 dark:border-espresso-700 hover:border-caramel-500 dark:hover:border-caramel-500 text-xs font-bold text-espresso-900 dark:text-cafe-100 shadow-xs transition-all active:scale-98"
+            >
+              <Store className="w-3.5 h-3.5 text-caramel-600 dark:text-caramel-400 shrink-0" />
+              <span>
+                {selectedBranchFilter === 'ALL'
+                  ? 'All Branches'
+                  : selectedBranchFilter === 'All Branches (Network)'
+                  ? 'Network Wide'
+                  : (REGISTERED_CAFES.find((c) => c.name === selectedBranchFilter)?.name.split(' - ')[1] || selectedBranchFilter)}
+              </span>
+              <ChevronDown
+                className={`w-3.5 h-3.5 text-espresso-400 dark:text-cafe-400 transition-transform duration-200 ${
+                  isBranchMenuOpen ? 'rotate-180 text-caramel-600 dark:text-caramel-400' : ''
+                }`}
+              />
+            </button>
+
+            <AnimatePresence>
+              {isBranchMenuOpen && (
+                <motion.div
+                  initial={{ opacity: 0, y: 6, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 6, scale: 0.95 }}
+                  transition={{ duration: 0.15 }}
+                  className="absolute right-0 top-full mt-2 w-56 rounded-2xl bg-white dark:bg-[#181310] border border-cafe-200 dark:border-espresso-700 shadow-cafe-lg z-50 p-1.5 backdrop-blur-xl"
+                >
+                  {[
+                    { value: 'ALL', label: 'All Branches' },
+                    { value: 'All Branches (Network)', label: 'Network Wide' },
+                    ...REGISTERED_CAFES.map((c) => ({
+                      value: c.name,
+                      label: c.name.split(' - ')[1] || c.name,
+                    })),
+                  ].map((opt) => {
+                    const isSelected = selectedBranchFilter === opt.value;
+                    return (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => {
+                          setSelectedBranchFilter(opt.value);
+                          setIsBranchMenuOpen(false);
+                        }}
+                        className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition-colors text-left ${
+                          isSelected
+                            ? 'bg-caramel-50 dark:bg-caramel-950/60 text-caramel-700 dark:text-caramel-300 font-bold'
+                            : 'text-espresso-700 dark:text-cafe-200 hover:bg-cafe-50 dark:hover:bg-espresso-800/80 hover:text-espresso-950 dark:hover:text-white'
+                        }`}
+                      >
+                        <span className="truncate">{opt.label}</span>
+                        {isSelected && <Check className="w-3.5 h-3.5 text-caramel-600 dark:text-caramel-400 shrink-0 ml-2" />}
+                      </button>
+                    );
+                  })}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
         </div>
       </div>
 

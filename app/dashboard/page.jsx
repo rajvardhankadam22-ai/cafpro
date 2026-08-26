@@ -19,7 +19,7 @@ import {
   Truck,
   Users,
   BarChart3,
-  DollarSign,
+  IndianRupee,
   FileText,
   Shield,
   Coffee,
@@ -148,7 +148,7 @@ export default function DashboardOverviewPage() {
               Total Stock Valuation
             </span>
             <div className="w-9 h-9 rounded-xl bg-caramel-100 dark:bg-caramel-950/60 text-caramel-700 dark:text-caramel-300 flex items-center justify-center">
-              <DollarSign className="w-4 h-4" />
+              <IndianRupee className="w-4 h-4" />
             </div>
           </div>
           <div>

@@ -8,7 +8,7 @@ import {
   Trash2,
   Package,
   Building,
-  DollarSign,
+  IndianRupee,
   Calendar,
   X,
   Check,

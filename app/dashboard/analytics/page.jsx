@@ -12,7 +12,7 @@ import {
   CheckCircle2,
   AlertTriangle,
   AlertCircle,
-  DollarSign,
+  IndianRupee,
   Package,
   ArrowRight,
 } from 'lucide-react';
@@ -143,7 +143,7 @@ export default function AnalyticsPage() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <div className="p-2 rounded-xl bg-caramel-100 dark:bg-caramel-950/60 text-caramel-700 dark:text-caramel-300">
-                <DollarSign className="w-4 h-4" />
+                <IndianRupee className="w-4 h-4" />
               </div>
               <h3 className="font-bold text-sm text-espresso-950 dark:text-cafe-50">
                 Top High-Value Stock Assets

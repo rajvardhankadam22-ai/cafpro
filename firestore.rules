@@ -1,55 +1,452 @@
 rules_version = '2';
+
+// ===============================================================
+// Assumed Data Models & Schemas
+// ===============================================================
+//
+// Collection: users/{userId}
+// Document ID: Firebase Auth UID
+// Fields:
+//   - uid: string (required, immutable, matches auth.uid)
+//   - email: string (required, valid email format)
+//   - displayName: string (optional, max 100 chars)
+//   - cafeName: string (optional, max 150 chars)
+//   - branchName: string (optional, max 150 chars)
+//   - branchCode: string (optional, max 50 chars)
+//   - city: string (optional, max 100 chars)
+//   - role: string (optional, max 50 chars)
+//   - roleLabel: string (optional, max 100 chars)
+//   - isStaff: bool (optional)
+//   - monthlyVolumeEstimate: string (optional, max 100 chars)
+//   - monthlyOrdersCount: number (optional, >= 0)
+//   - badge: string (optional, max 100 chars)
+//   - lastLogin: timestamp (optional)
+//   - createdAt: timestamp (optional)
+//   - updatedAt: timestamp (optional)
+//
+// Collection: registered_cafes/{cafeId}
+// Document ID: Cafe ID / Owner UID
+// Fields:
+//   - id: string (required, max 128 chars)
+//   - uid: string (optional, max 128 chars)
+//   - name: string (required, 1..150 chars)
+//   - branchName: string (optional, max 150 chars)
+//   - city: string (optional, max 100 chars)
+//   - state: string (optional, max 100 chars)
+//   - address: string (optional, max 255 chars)
+//   - managerName: string (optional, max 100 chars)
+//   - managerPhone: string (optional, max 50 chars)
+//   - badge: string (optional, max 100 chars)
+//   - email: string (optional, max 100 chars)
+//   - registeredAt: string or timestamp (optional)
+//
+// Collection: inventory_items/{itemId}
+// Fields:
+//   - id: string (optional, max 128 chars)
+//   - userId: string (required, matches auth.uid)
+//   - name: string (required, 1..150 chars)
+//   - sku: string (required, 1..50 chars)
+//   - quantity: number (required, >= 0, <= 10000000)
+//   - unitPrice: number (required, >= 0, <= 100000000)
+//   - unit: string (optional, max 30 chars)
+//   - category: string (optional, max 100 chars)
+//   - categoryId: string (optional, max 100 chars)
+//   - reorderLevel: number (optional, >= 0)
+//   - parLevel: number (optional, >= 0)
+//   - supplier: string (optional, max 150 chars)
+//   - notes: string (optional, max 2000 chars)
+//   - vendorMappings: list (optional, max 50 items)
+//   - createdAt: timestamp or string (optional)
+//   - updatedAt: timestamp or string (optional)
+//
+// Collection: categories/{catId}
+// Fields:
+//   - id: string (optional, max 128 chars)
+//   - userId: string (required, matches auth.uid)
+//   - name: string (required, 1..100 chars)
+//   - slug: string (required, 1..100 chars)
+//   - icon: string (optional, max 50 chars)
+//   - description: string (optional, max 500 chars)
+//   - createdAt: timestamp or string (optional)
+//
+// Collection: purchase_orders/{poId}
+// Fields:
+//   - id: string (optional, max 128 chars)
+//   - userId: string (required, matches auth.uid)
+//   - poNumber: string (required, 1..50 chars)
+//   - supplierName: string (optional, max 150 chars)
+//   - vendorName: string (optional, max 150 chars)
+//   - vendorId: string (optional, max 128 chars)
+//   - status: string (required, valid PO status)
+//   - items: list (required, 1..200 items)
+//   - totalAmount: number (optional, >= 0)
+//   - totalCost: number (optional, >= 0)
+//   - totalEstimatedCost: number (optional, >= 0)
+//   - expectedDelivery: string (optional, max 50 chars)
+//   - notes: string (optional, max 2000 chars)
+//   - destinationCafe: string (optional, max 150 chars)
+//   - receivedBy: string (optional, max 100 chars)
+//   - receivedAt: timestamp or string (optional)
+//   - createdAt: timestamp or string (optional)
+//
+// Collection: vendors/{vendorId}
+// Fields:
+//   - id: string (optional, max 128 chars)
+//   - userId: string (required, matches auth.uid)
+//   - name: string (required, 1..150 chars)
+//   - contactPerson: string (optional, max 100 chars)
+//   - email: string (optional, valid email format)
+//   - phone: string (optional, max 50 chars)
+//   - city: string (optional, max 100 chars)
+//   - leadTimeDays: number (optional, >= 0, <= 365)
+//   - paymentTerms: string (optional, max 50 chars)
+//   - category: string (optional, max 100 chars)
+//   - notes: string (optional, max 2000 chars)
+//   - createdAt: timestamp or string (optional)
+//
+// Collection: staff_members/{staffId}
+// Fields:
+//   - id: string (optional, max 128 chars)
+//   - userId: string (required, matches auth.uid)
+//   - name: string (required, 1..100 chars)
+//   - email: string (required, valid email format)
+//   - role: string (required, max 50 chars)
+//   - roleLabel: string (optional, max 100 chars)
+//   - status: string (optional, max 30 chars)
+//   - pin: string (optional, max 10 chars)
+//   - branch: string (optional, max 100 chars)
+//   - shift: string (optional, max 50 chars)
+//   - createdAt: timestamp or string (optional)
+//
+// Collection: activity_logs/{logId}
+// Fields:
+//   - id: string (optional, max 128 chars)
+//   - userId: string (required, matches auth.uid)
+//   - type: string (optional, max 50 chars)
+//   - action: string (optional, max 50 chars)
+//   - itemId: string (optional, max 128 chars)
+//   - itemName: string (optional, max 150 chars)
+//   - detail: string (optional, max 1000 chars)
+//   - user: string (optional, max 100 chars)
+//   - timestamp: timestamp or string (optional)
+//
+// Collection: supplier_applications/{appId}
+// Fields:
+//   - id: string (optional, max 128 chars)
+//   - companyName: string (required, 1..150 chars)
+//   - contactPerson: string (optional, max 100 chars)
+//   - email: string (required, valid email format)
+//   - phone: string (optional, max 50 chars)
+//   - city: string (optional, max 100 chars)
+//   - category: string (optional, max 100 chars)
+//   - leadTimeDays: number (optional, >= 0, <= 365)
+//   - paymentTerms: string (optional, max 50 chars)
+//   - status: string (required, valid app status)
+//   - quotedItems: list (optional, max 100 items)
+//   - notes: string (optional, max 2000 chars)
+//   - userId: string (optional, max 128 chars)
+//   - createdAt: timestamp or string (optional)
+//
+// ===============================================================
+
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Inventory Items collection - tenant isolated
-    match /inventory_items/{itemId} {
-      allow read, update, delete: if request.auth != null && (resource == null || resource.data.userId == request.auth.uid);
-      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
-    }
-    
-    // Categories collection - tenant isolated
-    match /categories/{catId} {
-      allow read, update, delete: if request.auth != null && (resource == null || resource.data.userId == request.auth.uid);
-      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
-    }
-    
-    // Purchase Orders collection - tenant isolated
-    match /purchase_orders/{poId} {
-      allow read, update, delete: if request.auth != null && (resource == null || resource.data.userId == request.auth.uid);
-      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
     }
 
-    // Vendors & Suppliers collection - tenant isolated
-    match /vendors/{vendorId} {
-      allow read, update, delete: if request.auth != null && (resource == null || resource.data.userId == request.auth.uid);
-      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
     }
 
-    // Staff Members collection - tenant isolated
-    match /staff_members/{staffId} {
-      allow read, update, delete: if request.auth != null && (resource == null || resource.data.userId == request.auth.uid);
-      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+    function isValidEmail(email) {
+      return email is string &&
+        email.size() >= 5 &&
+        email.size() <= 100 &&
+        email.matches('^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$');
     }
 
-    // Public Marketplace Supplier Applications
-    match /supplier_applications/{appId} {
-      // Allows prospective suppliers to self-register and submit wholesale bids
-      allow create: if true;
-      // Allows store owners to read and review submitted bids
-      allow read, update, delete: if request.auth != null;
+    function isValidOptionalEmail(field) {
+      return !(field in request.resource.data) ||
+        request.resource.data[field] == null ||
+        request.resource.data[field] == '' ||
+        isValidEmail(request.resource.data[field]);
     }
-    
-    // Activity Logs - tenant isolated
-    match /activity_logs/{logId} {
-      allow read: if request.auth != null && (resource == null || resource.data.userId == request.auth.uid);
-      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
-      allow delete: if request.auth != null && resource.data.userId == request.auth.uid;
+
+    function isValidStringLength(field, minLen, maxLen) {
+      return (field in request.resource.data) &&
+        request.resource.data[field] is string &&
+        request.resource.data[field].size() >= minLen &&
+        request.resource.data[field].size() <= maxLen;
     }
-    
-    // Users collection
+
+    function isValidOptionalString(field, maxLen) {
+      return !(field in request.resource.data) ||
+        request.resource.data[field] == null ||
+        (request.resource.data[field] is string &&
+         request.resource.data[field].size() <= maxLen);
+    }
+
+    function isValidOptionalNumber(field, minVal, maxVal) {
+      return !(field in request.resource.data) ||
+        request.resource.data[field] == null ||
+        (request.resource.data[field] is number &&
+         request.resource.data[field] >= minVal &&
+         request.resource.data[field] <= maxVal);
+    }
+
+    function isValidOptionalList(field, maxLen) {
+      return !(field in request.resource.data) ||
+        request.resource.data[field] == null ||
+        (request.resource.data[field] is list &&
+         request.resource.data[field].size() <= maxLen);
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUser(data) {
+      return (
+        data.uid is string &&
+        data.uid == request.auth.uid &&
+        isValidEmail(data.email) &&
+        isValidOptionalString('displayName', 100) &&
+        isValidOptionalString('cafeName', 150) &&
+        isValidOptionalString('branchName', 150) &&
+        isValidOptionalString('city', 100)
+      );
+    }
+
+    function isValidInventoryItem(data) {
+      return (
+        data.userId is string &&
+        data.userId == request.auth.uid &&
+        isValidStringLength('name', 1, 150) &&
+        isValidStringLength('sku', 1, 50) &&
+        data.quantity is number &&
+        data.quantity >= 0 &&
+        data.quantity <= 10000000 &&
+        data.unitPrice is number &&
+        data.unitPrice >= 0 &&
+        data.unitPrice <= 100000000 &&
+        isValidOptionalString('unit', 30) &&
+        isValidOptionalString('category', 100) &&
+        isValidOptionalString('supplier', 150) &&
+        isValidOptionalString('notes', 2000) &&
+        isValidOptionalNumber('reorderLevel', 0, 1000000) &&
+        isValidOptionalNumber('parLevel', 0, 1000000) &&
+        isValidOptionalList('vendorMappings', 50)
+      );
+    }
+
+    function isValidCategory(data) {
+      return (
+        data.userId is string &&
+        data.userId == request.auth.uid &&
+        isValidStringLength('name', 1, 100) &&
+        isValidStringLength('slug', 1, 100) &&
+        isValidOptionalString('icon', 50) &&
+        isValidOptionalString('description', 500)
+      );
+    }
+
+    function isValidPurchaseOrder(data) {
+      return (
+        data.userId is string &&
+        data.userId == request.auth.uid &&
+        isValidStringLength('poNumber', 1, 50) &&
+        data.status is string &&
+        data.status in ['DRAFT', 'ORDERED', 'PENDING_DELIVERY', 'IN_TRANSIT', 'DELIVERED', 'CANCELLED', 'PARTIALLY_DELIVERED'] &&
+        data.items is list &&
+        data.items.size() >= 1 &&
+        data.items.size() <= 200 &&
+        isValidOptionalString('supplierName', 150) &&
+        isValidOptionalString('notes', 2000) &&
+        isValidOptionalNumber('totalAmount', 0, 100000000) &&
+        isValidOptionalNumber('totalCost', 0, 100000000) &&
+        isValidOptionalNumber('totalEstimatedCost', 0, 100000000)
+      );
+    }
+
+    function isValidVendor(data) {
+      return (
+        data.userId is string &&
+        data.userId == request.auth.uid &&
+        isValidStringLength('name', 1, 150) &&
+        isValidOptionalEmail('email') &&
+        isValidOptionalString('phone', 50) &&
+        isValidOptionalString('city', 100) &&
+        isValidOptionalString('category', 100) &&
+        isValidOptionalString('notes', 2000) &&
+        isValidOptionalNumber('leadTimeDays', 0, 365)
+      );
+    }
+
+    function isValidStaff(data) {
+      return (
+        data.userId is string &&
+        data.userId == request.auth.uid &&
+        isValidStringLength('name', 1, 100) &&
+        isValidEmail(data.email) &&
+        isValidStringLength('role', 1, 50) &&
+        isValidOptionalString('pin', 10) &&
+        isValidOptionalString('branch', 100) &&
+        isValidOptionalString('shift', 50)
+      );
+    }
+
+    function isValidActivityLog(data) {
+      return (
+        data.userId is string &&
+        data.userId == request.auth.uid &&
+        isValidOptionalString('type', 50) &&
+        isValidOptionalString('action', 50) &&
+        isValidOptionalString('detail', 1000) &&
+        isValidOptionalString('user', 100)
+      );
+    }
+
+    function isValidSupplierApplication(data) {
+      return (
+        isValidStringLength('companyName', 1, 150) &&
+        isValidEmail(data.email) &&
+        data.status is string &&
+        data.status in ['pending', 'approved', 'rejected', 'under_review'] &&
+        isValidOptionalString('contactPerson', 100) &&
+        isValidOptionalString('phone', 50) &&
+        isValidOptionalString('city', 100) &&
+        isValidOptionalString('category', 100) &&
+        isValidOptionalString('notes', 2000) &&
+        isValidOptionalNumber('leadTimeDays', 0, 365) &&
+        isValidOptionalList('quotedItems', 100)
+      );
+    }
+
+    function isValidCafeDirectory(data) {
+      return (
+        isValidStringLength('name', 1, 150) &&
+        isValidOptionalString('branchName', 150) &&
+        isValidOptionalString('city', 100) &&
+        isValidOptionalString('state', 100) &&
+        isValidOptionalString('address', 255) &&
+        isValidOptionalString('managerName', 100) &&
+        isValidOptionalString('managerPhone', 50) &&
+        isValidOptionalString('badge', 100) &&
+        isValidOptionalEmail('email')
+      );
+    }
+
+    // ===============================================================
+    // Rules Collections Definition
+    // ===============================================================
+
+    // 1. Users Collection - STRICT PII LOCKDOWN (Owner only)
     match /users/{userId} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null && request.auth.uid == userId;
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidUser(request.resource.data);
+      allow update: if isOwner(userId) &&
+        isValidUser(request.resource.data) &&
+        request.resource.data.uid == resource.data.uid;
+      allow delete: if isOwner(userId);
+    }
+
+    // 2. Registered Cafes Public Directory (Wholesale Marketplace)
+    match /registered_cafes/{cafeId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() &&
+        (request.resource.data.id == request.auth.uid || request.resource.data.uid == request.auth.uid || cafeId == request.auth.uid) &&
+        isValidCafeDirectory(request.resource.data);
+      allow update: if isAuthenticated() &&
+        (resource.data.id == request.auth.uid || resource.data.uid == request.auth.uid || cafeId == request.auth.uid) &&
+        isValidCafeDirectory(request.resource.data);
+      allow delete: if isAuthenticated() &&
+        (resource.data.id == request.auth.uid || resource.data.uid == request.auth.uid || cafeId == request.auth.uid);
+    }
+
+    // 3. Inventory Items Collection - Tenant Isolated
+    match /inventory_items/{itemId} {
+      allow read, delete: if isAuthenticated() && (resource == null || resource.data.userId == request.auth.uid);
+      allow create: if isAuthenticated() &&
+        request.resource.data.userId == request.auth.uid &&
+        isValidInventoryItem(request.resource.data);
+      allow update: if isAuthenticated() &&
+        resource.data.userId == request.auth.uid &&
+        request.resource.data.userId == resource.data.userId &&
+        isValidInventoryItem(request.resource.data);
+    }
+
+    // 4. Categories Collection - Tenant Isolated
+    match /categories/{catId} {
+      allow read, delete: if isAuthenticated() && (resource == null || resource.data.userId == request.auth.uid);
+      allow create: if isAuthenticated() &&
+        request.resource.data.userId == request.auth.uid &&
+        isValidCategory(request.resource.data);
+      allow update: if isAuthenticated() &&
+        resource.data.userId == request.auth.uid &&
+        request.resource.data.userId == resource.data.userId &&
+        isValidCategory(request.resource.data);
+    }
+
+    // 5. Purchase Orders Collection - Tenant Isolated
+    match /purchase_orders/{poId} {
+      allow read, delete: if isAuthenticated() && (resource == null || resource.data.userId == request.auth.uid);
+      allow create: if isAuthenticated() &&
+        request.resource.data.userId == request.auth.uid &&
+        isValidPurchaseOrder(request.resource.data);
+      allow update: if isAuthenticated() &&
+        resource.data.userId == request.auth.uid &&
+        request.resource.data.userId == resource.data.userId &&
+        isValidPurchaseOrder(request.resource.data);
+    }
+
+    // 6. Vendors Collection - Tenant Isolated
+    match /vendors/{vendorId} {
+      allow read, delete: if isAuthenticated() && (resource == null || resource.data.userId == request.auth.uid);
+      allow create: if isAuthenticated() &&
+        request.resource.data.userId == request.auth.uid &&
+        isValidVendor(request.resource.data);
+      allow update: if isAuthenticated() &&
+        resource.data.userId == request.auth.uid &&
+        request.resource.data.userId == resource.data.userId &&
+        isValidVendor(request.resource.data);
+    }
+
+    // 7. Staff Members Collection - Tenant Isolated
+    match /staff_members/{staffId} {
+      allow read, delete: if isAuthenticated() && (resource == null || resource.data.userId == request.auth.uid);
+      allow create: if isAuthenticated() &&
+        request.resource.data.userId == request.auth.uid &&
+        isValidStaff(request.resource.data);
+      allow update: if isAuthenticated() &&
+        resource.data.userId == request.auth.uid &&
+        request.resource.data.userId == resource.data.userId &&
+        isValidStaff(request.resource.data);
+    }
+
+    // 8. Supplier Applications / Proposals - Validated Registration & Store Admin Review
+    match /supplier_applications/{appId} {
+      allow create: if isValidSupplierApplication(request.resource.data);
+      allow read, update, delete: if isAuthenticated();
+    }
+
+    // 9. Activity Logs Collection - Immutable Tenant Audit Trail
+    match /activity_logs/{logId} {
+      allow read, delete: if isAuthenticated() && (resource == null || resource.data.userId == request.auth.uid);
+      allow create: if isAuthenticated() &&
+        request.resource.data.userId == request.auth.uid &&
+        isValidActivityLog(request.resource.data);
+      allow update: if false; // Immutable audit log
+    }
+
+    // 10. System Health Ping Test
+    match /system_health/{healthId} {
+      allow read, write: if isAuthenticated();
     }
   }
 }
