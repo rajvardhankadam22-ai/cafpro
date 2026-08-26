@@ -18,7 +18,7 @@ export default function RootLoading() {
           </h3>
           <div className="flex items-center justify-center gap-1.5 text-xs text-caramel-400 font-bold">
             <span className="w-2 h-2 rounded-full bg-caramel-500 animate-ping" />
-            <span>Loading Platform...</span>
+            <span>Loading...</span>
           </div>
         </div>
       </div>
