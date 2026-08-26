@@ -708,9 +708,7 @@ export async function deleteCafeAccountWithPassword(password, userId) {
       ) {
         throw new Error('Incorrect Admin password. Account deletion denied.');
       }
-      if (password.trim().length < 6) {
-        throw new Error('Invalid Admin password provided.');
-      }
+      throw new Error(authErr.message || 'Authentication failed. Please verify your Admin password.');
     }
   } else {
     // Offline / local validation
