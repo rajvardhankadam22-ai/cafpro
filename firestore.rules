@@ -366,7 +366,7 @@ service cloud.firestore {
         (resource.data.id == request.auth.uid || resource.data.uid == request.auth.uid || cafeId == request.auth.uid) &&
         isValidCafeDirectory(request.resource.data);
       allow delete: if isAuthenticated() &&
-        (resource.data.id == request.auth.uid || resource.data.uid == request.auth.uid || cafeId == request.auth.uid);
+        (resource == null || resource.data.id == request.auth.uid || resource.data.uid == request.auth.uid || cafeId == request.auth.uid);
     }
 
     // 3. Inventory Items Collection - Tenant Isolated

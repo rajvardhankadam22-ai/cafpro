@@ -592,14 +592,28 @@ export async function logoutUser() {
  * 7. Permanently Delete Café Account & Wipe All Associated Data
  */
 export async function deleteCafeAccount(userId) {
-  const uid = userId || getCurrentUser()?.uid;
+  const currentUser = getCurrentUser();
+  const uid = userId || currentUser?.uid;
   if (!uid) return;
 
   // 1. Delete all Firestore records associated with this userId
   if (isFirebaseConfigured() && db && uid) {
     try {
-      await deleteDoc(doc(db, 'users', uid));
+      // 1.1 Delete user profile in 'users'
+      try {
+        await deleteDoc(doc(db, 'users', uid));
+      } catch (err) {
+        console.warn('Delete users doc notice:', err.message);
+      }
 
+      // 1.2 Delete public directory card in 'registered_cafes'
+      try {
+        await deleteDoc(doc(db, 'registered_cafes', uid));
+      } catch (err) {
+        console.warn('Delete registered_cafes doc notice:', err.message);
+      }
+
+      // 1.3 Purge all tenant collections belonging to this user
       const collectionsToPurge = [
         'inventory_items',
         'categories',
@@ -616,7 +630,9 @@ export async function deleteCafeAccount(userId) {
           const snapshot = await getDocs(q);
           const deletePromises = snapshot.docs.map((d) => deleteDoc(doc(db, collName, d.id)));
           await Promise.all(deletePromises);
-        } catch (e) {}
+        } catch (e) {
+          console.warn(`Purge error for ${collName}:`, e.message);
+        }
       }
     } catch (e) {
       console.warn('Notice purging Firestore user account:', e.message);
@@ -630,7 +646,7 @@ export async function deleteCafeAccount(userId) {
         await auth.currentUser.delete();
       }
     } catch (e) {
-      console.warn('Firebase Auth user delete:', e.message);
+      console.warn('Firebase Auth user delete notice:', e.message);
     }
   }
 
@@ -645,6 +661,13 @@ export async function deleteCafeAccount(userId) {
         `cafepulse_vendors_${uid}`,
         `cafepulse_supplier_apps_${uid}`,
         `cafepulse_staff_${uid}`,
+        `cafepulse_items_guest`,
+        `cafepulse_cats_guest`,
+        `cafepulse_logs_guest`,
+        `cafepulse_pos_guest`,
+        `cafepulse_vendors_guest`,
+        `cafepulse_supplier_apps_guest`,
+        `cafepulse_staff_guest`,
         LOCAL_AUTH_KEY,
       ];
       keysToRemove.forEach((k) => localStorage.removeItem(k));
