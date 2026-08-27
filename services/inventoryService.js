@@ -665,16 +665,9 @@ export async function updateInventoryItem(id, updatedData, userId = DEFAULT_USER
 /**
  * 7. Delete Inventory Item
  */
-export async function deleteInventoryItem(id, p2 = '', p3 = '', userName = 'Café Manager') {
-  let uid = DEFAULT_USER_ID;
-  let itemName = 'Item';
-  if (p2 && typeof p2 === 'string' && (p2.includes('@') || p2.length > 20 || !p3)) {
-    uid = p2;
-    itemName = p3 || 'Item';
-  } else {
-    itemName = p2 || 'Item';
-    uid = p3 || DEFAULT_USER_ID;
-  }
+export async function deleteInventoryItem(id, userId = DEFAULT_USER_ID, itemName = 'Item', userName = 'Café Manager') {
+  const uid = userId || DEFAULT_USER_ID;
+  const cleanItemName = itemName || 'Item';
 
   if (isFirebaseConfigured() && db) {
     try {
@@ -690,22 +683,14 @@ export async function deleteInventoryItem(id, p2 = '', p3 = '', userName = 'Caf�
   setLocalData(itemsKey, updated);
   bus.emit(`inventory_${uid}`, updated);
 
-  logActivity(uid, 'DELETED', id, itemName, `Removed from catalogue`, userName);
+  logActivity(uid, 'DELETED', id, cleanItemName, `Removed from catalogue`, userName);
 }
 
 /**
  * 8. Quick Adjust Quantity (Floor POS & Quick Stock Update)
  */
-export async function quickAdjustQuantity(id, delta, p3 = '', p4 = '', userName = 'Barista Floor') {
-  let uid = DEFAULT_USER_ID;
-  let itemName = 'Item';
-  if (p3 && typeof p3 === 'string' && (p3.includes('@') || p3.length > 20 || !p4)) {
-    uid = p3;
-    itemName = p4 || 'Item';
-  } else {
-    itemName = p3 || 'Item';
-    uid = p4 || DEFAULT_USER_ID;
-  }
+export async function quickAdjustQuantity(id, delta, userId = DEFAULT_USER_ID, itemName = 'Item', userName = 'Barista Floor') {
+  const uid = userId || DEFAULT_USER_ID;
   const numDelta = Number(delta);
   if (isNaN(numDelta) || numDelta === 0) return;
 
@@ -1198,11 +1183,10 @@ export async function addVendor(vendorData, userId = DEFAULT_USER_ID, userName =
 
   if (isFirebaseConfigured() && db) {
     try {
-      const docRef = await addDoc(collection(db, 'vendors'), {
+      await setDoc(doc(db, 'vendors', newVendor.id), {
         ...newVendor,
         createdAt: serverTimestamp(),
       });
-      newVendor.id = docRef.id;
     } catch (e) {
       console.warn('Notice saving vendor:', e.message);
     }
@@ -2138,11 +2122,10 @@ export async function addStaffMember(staffData, userId = DEFAULT_USER_ID, userNa
 
   if (isFirebaseConfigured() && db) {
     try {
-      const docRef = await addDoc(collection(db, 'staff_members'), {
+      await setDoc(doc(db, 'staff_members', newStaff.id), {
         ...newStaff,
         createdAt: serverTimestamp(),
       });
-      newStaff.id = docRef.id;
     } catch (e) {
       console.warn('Notice saving staff member:', e.message);
     }
