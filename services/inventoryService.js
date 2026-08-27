@@ -321,10 +321,13 @@ export function subscribeToCategories(userId, callback) {
         q,
         (snapshot) => {
           if (!snapshot.empty) {
-            const categories = snapshot.docs.map((d) => ({
-              ...d.data(),
-              id: d.id,
-            }));
+            const categories = snapshot.docs.map((d) => {
+              const data = d.data();
+              return {
+                ...data,
+                id: data.originalId || data.id || d.id,
+              };
+            });
             setLocalData(localCatsKey, categories);
             callback(categories);
           } else {
@@ -340,7 +343,8 @@ export function subscribeToCategories(userId, callback) {
                 doc(db, 'categories', `${uid}_${catId}`),
                 {
                   ...cat,
-                  id: `${uid}_${catId}`,
+                  id: catId,
+                  originalId: catId,
                   userId: uid,
                   createdAt: serverTimestamp(),
                 },
@@ -1117,26 +1121,29 @@ export function subscribeToVendors(userId = DEFAULT_USER_ID, callback) {
         q,
         (snapshot) => {
           if (!snapshot.empty) {
-            const firestoreVendors = snapshot.docs.map((doc) => ({
-              id: doc.id,
-              ...doc.data(),
-            }));
+            const firestoreVendors = snapshot.docs.map((doc) => {
+              const data = doc.data();
+              return {
+                ...data,
+                id: data.originalId || data.id || doc.id,
+              };
+            });
             setLocalData(vendorsKey, firestoreVendors);
             callback(firestoreVendors);
           } else {
-            const local = getLocalData(vendorsKey, []);
-            if (local && local.length > 0) {
-              local.forEach((v) => {
-                setDoc(
-                  doc(db, 'vendors', v.id),
-                  { ...v, userId: uid, createdAt: serverTimestamp() },
-                  { merge: true }
-                ).catch(() => {});
-              });
-              callback(local);
-            } else {
-              callback(INITIAL_VENDORS);
-            }
+            const local = getLocalData(vendorsKey, INITIAL_VENDORS);
+            const valid = local && local.length > 0 ? local : INITIAL_VENDORS;
+            setLocalData(vendorsKey, valid);
+            callback(valid);
+
+            valid.forEach((v) => {
+              const vId = v.id || `ven-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`;
+              setDoc(
+                doc(db, 'vendors', `${uid}_${vId}`),
+                { ...v, id: vId, originalId: vId, userId: uid, createdAt: serverTimestamp() },
+                { merge: true }
+              ).catch(() => {});
+            });
           }
         },
         (err) => {
@@ -2059,26 +2066,29 @@ export function subscribeToStaffMembers(userId = DEFAULT_USER_ID, callback) {
         q,
         (snapshot) => {
           if (!snapshot.empty) {
-            const firestoreStaff = snapshot.docs.map((doc) => ({
-              id: doc.id,
-              ...doc.data(),
-            }));
+            const firestoreStaff = snapshot.docs.map((doc) => {
+              const data = doc.data();
+              return {
+                ...data,
+                id: data.originalId || data.id || doc.id,
+              };
+            });
             setLocalData(staffKey, firestoreStaff);
             callback(firestoreStaff);
           } else {
-            const local = getLocalData(staffKey, []);
-            if (local && local.length > 0) {
-              local.forEach((s) => {
-                setDoc(
-                  doc(db, 'staff_members', s.id),
-                  { ...s, userId: uid, createdAt: serverTimestamp() },
-                  { merge: true }
-                ).catch(() => {});
-              });
-              callback(local);
-            } else {
-              callback(INITIAL_STAFF_MEMBERS);
-            }
+            const local = getLocalData(staffKey, INITIAL_STAFF_MEMBERS);
+            const valid = local && local.length > 0 ? local : INITIAL_STAFF_MEMBERS;
+            setLocalData(staffKey, valid);
+            callback(valid);
+
+            valid.forEach((s) => {
+              const sId = s.id || `staff-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`;
+              setDoc(
+                doc(db, 'staff_members', `${uid}_${sId}`),
+                { ...s, id: sId, originalId: sId, userId: uid, createdAt: serverTimestamp() },
+                { merge: true }
+              ).catch(() => {});
+            });
           }
         },
         (err) => {

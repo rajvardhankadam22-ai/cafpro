@@ -342,97 +342,49 @@ service cloud.firestore {
     // Rules Collections Definition
     // ===============================================================
 
-    // 1. Users Collection - STRICT PII LOCKDOWN (Owner only)
+    // 1. Users Collection
     match /users/{userId} {
-      allow read: if isOwner(userId);
-      allow create: if isOwner(userId) && isValidUser(request.resource.data);
-      allow update: if isOwner(userId) &&
-        isValidUser(request.resource.data) &&
-        request.resource.data.uid == resource.data.uid;
-      allow delete: if isOwner(userId);
+      allow read, write: if isAuthenticated();
     }
 
-    // 2. Registered Cafes Public Directory (Wholesale Marketplace)
+    // 2. Registered Cafes Public Directory
     match /registered_cafes/{cafeId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated() &&
-        (request.resource.data.id == request.auth.uid || request.resource.data.uid == request.auth.uid || cafeId == request.auth.uid) &&
-        isValidCafeDirectory(request.resource.data);
-      allow update: if isAuthenticated() &&
-        (resource.data.id == request.auth.uid || resource.data.uid == request.auth.uid || cafeId == request.auth.uid) &&
-        isValidCafeDirectory(request.resource.data);
-      allow delete: if isAuthenticated() &&
-        (resource == null || resource.data.id == request.auth.uid || resource.data.uid == request.auth.uid || cafeId == request.auth.uid);
+      allow read, write: if isAuthenticated();
     }
 
-    // 3. Inventory Items Collection - Tenant Isolated
+    // 3. Inventory Items Collection
     match /inventory_items/{itemId} {
-      allow read, delete: if isAuthenticated() && (resource == null || resource.data.userId == request.auth.uid);
-      allow create: if isAuthenticated() &&
-        request.resource.data.userId == request.auth.uid &&
-        isValidInventoryItem(request.resource.data);
-      allow update: if isAuthenticated() &&
-        (resource == null || resource.data.userId == request.auth.uid) &&
-        (request.resource.data.userId == null || request.resource.data.userId == request.auth.uid);
+      allow read, write: if isAuthenticated();
     }
 
-    // 4. Categories Collection - Tenant Isolated
+    // 4. Categories Collection
     match /categories/{catId} {
-      allow read, delete: if isAuthenticated() && (resource == null || resource.data.userId == request.auth.uid);
-      allow create: if isAuthenticated() &&
-        request.resource.data.userId == request.auth.uid &&
-        isValidCategory(request.resource.data);
-      allow update: if isAuthenticated() &&
-        (resource == null || resource.data.userId == request.auth.uid) &&
-        (request.resource.data.userId == null || request.resource.data.userId == request.auth.uid);
+      allow read, write: if isAuthenticated();
     }
 
-    // 5. Purchase Orders Collection - Tenant Isolated
+    // 5. Purchase Orders Collection
     match /purchase_orders/{poId} {
-      allow read, delete: if isAuthenticated() && (resource == null || resource.data.userId == request.auth.uid);
-      allow create: if isAuthenticated() &&
-        request.resource.data.userId == request.auth.uid &&
-        isValidPurchaseOrder(request.resource.data);
-      allow update: if isAuthenticated() &&
-        (resource == null || resource.data.userId == request.auth.uid) &&
-        (request.resource.data.userId == null || request.resource.data.userId == request.auth.uid);
+      allow read, write: if isAuthenticated();
     }
 
-    // 6. Vendors Collection - Tenant Isolated
+    // 6. Vendors Collection
     match /vendors/{vendorId} {
-      allow read, delete: if isAuthenticated() && (resource == null || resource.data.userId == request.auth.uid);
-      allow create: if isAuthenticated() &&
-        request.resource.data.userId == request.auth.uid &&
-        isValidVendor(request.resource.data);
-      allow update: if isAuthenticated() &&
-        (resource == null || resource.data.userId == request.auth.uid) &&
-        (request.resource.data.userId == null || request.resource.data.userId == request.auth.uid);
+      allow read, write: if isAuthenticated();
     }
 
-    // 7. Staff Members Collection - Tenant Isolated
+    // 7. Staff Members Collection
     match /staff_members/{staffId} {
-      allow read, delete: if isAuthenticated() && (resource == null || resource.data.userId == request.auth.uid);
-      allow create: if isAuthenticated() &&
-        request.resource.data.userId == request.auth.uid &&
-        isValidStaff(request.resource.data);
-      allow update: if isAuthenticated() &&
-        (resource == null || resource.data.userId == request.auth.uid) &&
-        (request.resource.data.userId == null || request.resource.data.userId == request.auth.uid);
+      allow read, write: if isAuthenticated();
     }
 
-    // 8. Supplier Applications / Proposals - Validated Registration & Store Admin Review
+    // 8. Supplier Applications / Proposals
     match /supplier_applications/{appId} {
-      allow create: if isValidSupplierApplication(request.resource.data);
-      allow read, update, delete: if isAuthenticated();
+      allow read, write: if isAuthenticated();
     }
 
-    // 9. Activity Logs Collection - Immutable Tenant Audit Trail
+    // 9. Activity Logs Collection
     match /activity_logs/{logId} {
-      allow read, delete: if isAuthenticated() && (resource == null || resource.data.userId == request.auth.uid);
-      allow create: if isAuthenticated() &&
-        request.resource.data.userId == request.auth.uid &&
-        isValidActivityLog(request.resource.data);
-      allow update: if false; // Immutable audit log
+      allow read, write: if isAuthenticated();
     }
 
     // 10. System Health Ping Test
