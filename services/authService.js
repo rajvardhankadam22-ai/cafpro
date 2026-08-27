@@ -98,9 +98,10 @@ export function subscribeToAuth(callback) {
     callback(cachedUser);
   }
 
+  let unsubscribeFirebase = () => {};
   if (isFirebaseConfigured() && auth) {
     try {
-      const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      unsubscribeFirebase = onAuthStateChanged(auth, async (user) => {
         if (user) {
           let userCafeName = 'Artisan Specialty Café';
           let userBranchName = 'Main Flagship Branch';
@@ -173,20 +174,26 @@ export function subscribeToAuth(callback) {
             } catch (e) {}
           }
         } else {
-          // If Firebase confirms no active session, deliver fallback or null
+          // Firebase confirms no active session
           const localSession = getCurrentUser();
-          callback(localSession);
+          if (!localSession) {
+            callback(null);
+          }
         }
       });
-      return unsubscribe;
     } catch (e) {
       console.warn('Firebase Auth listener standby:', e.message);
     }
+  } else {
+    const initial = getCurrentUser();
+    setTimeout(() => callback(initial), 0);
   }
 
-  const initial = getCurrentUser();
-  setTimeout(() => callback(initial), 0);
-  return authBus.on(callback);
+  const busUnsub = authBus.on(callback);
+  return () => {
+    busUnsub();
+    unsubscribeFirebase();
+  };
 }
 
 /**

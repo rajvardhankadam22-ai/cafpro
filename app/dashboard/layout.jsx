@@ -178,17 +178,24 @@ export default function DashboardLayout({ children }) {
   // 1. Subscribe to Authentication
   useEffect(() => {
     const unsubAuth = subscribeToAuth((user) => {
-      setCurrentUser(user);
-      if (user?.role) setRole(user.role);
-      setAuthResolved(true);
+      if (user) {
+        setCurrentUser(user);
+        if (user?.role) setRole(user.role);
+        setAuthResolved(true);
+      } else {
+        setCurrentUser(null);
+        setAuthResolved(true);
+        router.replace('/login');
+      }
     });
     return () => unsubAuth();
-  }, []);
+  }, [router]);
 
   // 2. Subscribe to User-Isolated Data
   useEffect(() => {
-    if (!authResolved) return;
-    const uid = currentUser?.storeUid || currentUser?.uid || 'guest';
+    if (!authResolved || !currentUser) return;
+    const uid = currentUser.storeUid || currentUser.uid;
+    if (!uid || uid === 'guest') return;
     setIsLoading(true);
 
     const unsubInventory = subscribeToInventory(uid, (data) => {

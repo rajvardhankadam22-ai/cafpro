@@ -195,7 +195,7 @@ export function subscribeToInventory(userId, callback) {
   const localKey = getLocalItemsKey(uid);
 
   // Deliver cached local session immediately for zero-lag UI, deduplicating IDs
-  const rawLocal = getLocalData(localKey, INITIAL_INVENTORY_ITEMS);
+  const rawLocal = getLocalData(localKey, []);
   const seenInitial = new Set();
   const userItems = [];
   if (Array.isArray(rawLocal)) {
@@ -250,12 +250,12 @@ export function subscribeToInventory(userId, callback) {
               });
               callback(local);
             } else {
-              callback(INITIAL_INVENTORY_ITEMS);
+              callback([]);
             }
           }
         },
         () => {
-          const local = getLocalData(localKey, INITIAL_INVENTORY_ITEMS);
+          const local = getLocalData(localKey, []);
           callback(local);
         }
       );
