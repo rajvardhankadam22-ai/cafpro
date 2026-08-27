@@ -150,30 +150,41 @@ export default function DashboardLayout({ children }) {
   const [supplierApplications, setSupplierApplications] = useState([]);
   const [authResolved, setAuthResolved] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
+  const [lastSyncTime, setLastSyncTime] = useState(null);
 
-  // Network Online/Offline Auto-Sync Monitor
+  // Network Online/Offline Auto-Sync Monitor & Window Focus Revalidator
   useEffect(() => {
     if (typeof window === 'undefined') return;
     setIsOnline(navigator.onLine);
 
     const handleOnline = () => {
       setIsOnline(true);
-      toast.success('Internet reconnected! All offline changes synced with Cloud Firestore.', 'Online Sync Active');
+      setLastSyncTime(new Date());
+      toast.success('Internet reconnected! Live Cloud Sync active.', 'Online Sync Active');
     };
 
     const handleOffline = () => {
       setIsOnline(false);
-      toast.warning('Network connection lost. Offline Mode active — all changes will save locally and auto-sync when online.', 'Offline Mode');
+      toast.warning('Network connection lost. Offline Mode active — changes will auto-sync when online.', 'Offline Mode');
+    };
+
+    // Auto-revalidate whenever user switches back to this tab or unlocks their device screen
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && currentUser) {
+        setLastSyncTime(new Date());
+      }
     };
 
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, []);
+  }, [currentUser]);
 
   // 1. Subscribe to Authentication
   useEffect(() => {
@@ -200,21 +211,17 @@ export default function DashboardLayout({ children }) {
 
     const unsubInventory = subscribeToInventory(uid, (data) => {
       if (Array.isArray(data)) {
-        const seen = new Set();
-        const unique = [];
-        for (const item of data) {
-          if (item && item.id && !seen.has(item.id)) {
-            seen.add(item.id);
-            unique.push(item);
-          }
-        }
-        setItems(unique);
+        setItems(data);
+        setLastSyncTime(new Date());
       }
       setIsLoading(false);
     });
 
     const unsubCategories = subscribeToCategories(uid, (cats) => {
-      if (Array.isArray(cats)) setCategories(cats);
+      if (Array.isArray(cats)) {
+        setCategories(cats);
+        setLastSyncTime(new Date());
+      }
     });
 
     const unsubLogs = subscribeToActivityLogs(uid, (logs) => {
@@ -602,6 +609,8 @@ export default function DashboardLayout({ children }) {
     role,
     setRole,
     isLoading,
+    isOnline,
+    lastSyncTime,
     searchQuery,
     setSearchQuery,
     lowStockItems,
@@ -668,6 +677,8 @@ export default function DashboardLayout({ children }) {
             vendors={vendors}
             staffMembers={staffMembers}
             totalValuation={totalValuation}
+            isOnline={isOnline}
+            lastSyncTime={lastSyncTime}
           />
 
           <main className="flex-1 p-4 sm:p-8 max-w-7xl w-full mx-auto space-y-8 animate-pageFadeIn">

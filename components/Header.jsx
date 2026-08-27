@@ -13,6 +13,10 @@ import {
   Coffee,
   CheckCircle2,
   AlertCircle,
+  Cloud,
+  Wifi,
+  WifiOff,
+  RefreshCw,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -24,6 +28,8 @@ export default function Header({
   outOfStockItems = [],
   currentUser,
   role = 'manager',
+  isOnline = true,
+  lastSyncTime = null,
 }) {
   const [isDark, setIsDark] = useState(true);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
@@ -98,8 +104,37 @@ export default function Header({
           </div>
         </div>
 
-        {/* Right Side: Role Badge, Dark Mode, Notifications */}
+        {/* Right Side: Multi-Device Sync Indicator, Role Badge, Dark Mode, Notifications */}
         <div className="flex items-center gap-2.5 sm:gap-3">
+          {/* Multi-Device Live Cloud Sync Status Badge */}
+          <div
+            className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-2xl border text-[11px] font-bold shadow-xs transition-all ${
+              isOnline
+                ? 'bg-emerald-50/90 dark:bg-emerald-950/40 border-emerald-300/80 dark:border-emerald-800/60 text-emerald-900 dark:text-emerald-300'
+                : 'bg-amber-50/90 dark:bg-amber-950/40 border-amber-300/80 dark:border-amber-800/60 text-amber-900 dark:text-amber-300'
+            }`}
+            title={
+              isOnline
+                ? `Connected to Firestore Real-Time Sync (Store UID: ${currentUser?.storeUid || currentUser?.uid || 'guest'}). Changes made on any device sync live.`
+                : 'Network offline. Changes saved locally will sync once internet reconnects.'
+            }
+          >
+            {isOnline ? (
+              <>
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                </span>
+                <Cloud className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                <span>Live Sync</span>
+              </>
+            ) : (
+              <>
+                <WifiOff className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                <span>Offline</span>
+              </>
+            )}
+          </div>
           {/* Role Status Badge */}
           <div
             className={`flex items-center gap-2 px-3 py-1.5 rounded-2xl border text-xs font-bold shadow-sm ${

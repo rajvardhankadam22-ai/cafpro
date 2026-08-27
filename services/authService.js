@@ -261,7 +261,7 @@ export async function loginAsDemo(roleType = 'admin') {
     }
   }
 
-  // Pre-seed demo data in Firestore if configured
+  // Register user profile in Firestore if configured
   if (isFirebaseConfigured() && db) {
     try {
       setDoc(doc(db, 'users', storeUid), {
@@ -275,39 +275,6 @@ export async function loginAsDemo(roleType = 'admin') {
         isStaff: !isAdminUser,
         lastLogin: serverTimestamp(),
       }, { merge: true }).catch(() => {});
-
-      INITIAL_INVENTORY_ITEMS.forEach((itm) => {
-        setDoc(doc(db, 'inventory_items', itm.id), {
-          ...itm,
-          userId: storeUid,
-          updatedAt: serverTimestamp(),
-        }, { merge: true }).catch(() => {});
-      });
-
-      INITIAL_CATEGORIES.forEach((cat) => {
-        setDoc(doc(db, 'categories', `${storeUid}_${cat.id}`), {
-          ...cat,
-          id: cat.id,
-          userId: storeUid,
-          createdAt: serverTimestamp(),
-        }, { merge: true }).catch(() => {});
-      });
-
-      INITIAL_VENDORS.forEach((v) => {
-        setDoc(doc(db, 'vendors', v.id), {
-          ...v,
-          userId: storeUid,
-          createdAt: serverTimestamp(),
-        }, { merge: true }).catch(() => {});
-      });
-
-      INITIAL_STAFF_MEMBERS.forEach((s) => {
-        setDoc(doc(db, 'staff_members', s.id), {
-          ...s,
-          userId: storeUid,
-          createdAt: serverTimestamp(),
-        }, { merge: true }).catch(() => {});
-      });
     } catch (e) {}
   }
 
