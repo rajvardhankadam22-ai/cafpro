@@ -267,7 +267,18 @@ export default function DashboardLayout({ children }) {
     0
   );
 
-  const currentUid = currentUser?.storeUid || currentUser?.uid || 'guest';
+  const getActiveUid = () => {
+    if (currentUser?.storeUid && currentUser.storeUid !== 'guest') return currentUser.storeUid;
+    if (currentUser?.uid && currentUser.uid !== 'guest') return currentUser.uid;
+    if (typeof window !== 'undefined') {
+      try {
+        const session = JSON.parse(localStorage.getItem('cafepulse_user_session') || '{}');
+        if (session?.storeUid && session.storeUid !== 'guest') return session.storeUid;
+        if (session?.uid && session.uid !== 'guest') return session.uid;
+      } catch (e) {}
+    }
+    return 'demo_cafepulse_admin';
+  };
 
   // Handlers
   const handleOpenAddItem = () => {
@@ -282,11 +293,12 @@ export default function DashboardLayout({ children }) {
 
   const handleSaveItem = async (itemData) => {
     try {
+      const activeUid = getActiveUid();
       if (itemToEdit) {
-        await updateInventoryItem(itemToEdit.id, itemData, currentUid);
+        await updateInventoryItem(itemToEdit.id, itemData, activeUid);
         toast.success(`Updated ${itemData.name}`, 'Item Updated');
       } else {
-        await addInventoryItem(itemData, currentUid);
+        await addInventoryItem(itemData, activeUid);
         toast.success(`Added ${itemData.name} to catalogue`, 'Item Added');
       }
     } catch (e) {
@@ -305,7 +317,7 @@ export default function DashboardLayout({ children }) {
     try {
       setIsDeleting(true);
       const deletedId = itemToDelete.id;
-      await deleteInventoryItem(deletedId, currentUid, itemToDelete.name);
+      await deleteInventoryItem(deletedId, getActiveUid(), itemToDelete.name);
       toast.success(`Deleted ${itemToDelete.name}`, 'Item Removed');
       setIsDeleteModalOpen(false);
       setItemToDelete(null);
@@ -320,7 +332,7 @@ export default function DashboardLayout({ children }) {
   const handleAdjustQuantity = async (itemId, delta, itemName) => {
     try {
       const actorName = `${currentUser?.displayName || 'Floor Staff'} (${currentUser?.roleLabel || currentUser?.role || 'Staff'})`;
-      await quickAdjustQuantity(itemId, delta, currentUid, itemName, actorName);
+      await quickAdjustQuantity(itemId, delta, getActiveUid(), itemName, actorName);
     } catch (e) {
       console.error(e);
       toast.error('Failed to adjust stock', 'Error');
@@ -347,7 +359,7 @@ export default function DashboardLayout({ children }) {
 
   const handleSavePurchaseOrder = async (poData) => {
     try {
-      const newPo = await createPurchaseOrder(poData, currentUid);
+      const newPo = await createPurchaseOrder(poData, getActiveUid());
       toast.success(`Created ${newPo.poNumber} for ${newPo.supplierName}`, 'Purchase Order Issued');
     } catch (e) {
       console.error(e);
@@ -362,7 +374,7 @@ export default function DashboardLayout({ children }) {
 
   const handleReconcileGoodsReceipt = async (poId, deliveryData, receiverName) => {
     try {
-      const updatedPo = await receivePurchaseOrder(poId, deliveryData, currentUid, receiverName);
+      const updatedPo = await receivePurchaseOrder(poId, deliveryData, getActiveUid(), receiverName);
       toast.success(`Goods receipt reconciled for ${updatedPo.poNumber}! Stock updated.`, 'Delivery Received');
     } catch (e) {
       console.error(e);
@@ -382,11 +394,12 @@ export default function DashboardLayout({ children }) {
 
   const handleSaveCategory = async (catData) => {
     try {
+      const activeUid = getActiveUid();
       if (categoryToEdit) {
-        await updateCategory(categoryToEdit.id, catData, currentUid);
+        await updateCategory(categoryToEdit.id, catData, activeUid);
         toast.success(`Updated category ${catData.name}`, 'Category Updated');
       } else {
-        await addCategory(catData, currentUid);
+        await addCategory(catData, activeUid);
         toast.success(`Created category ${catData.name}`, 'Category Created');
       }
     } catch (e) {
@@ -397,7 +410,7 @@ export default function DashboardLayout({ children }) {
 
   const handleDeleteCategory = async (catId, catName) => {
     try {
-      await deleteCategory(catId, currentUid);
+      await deleteCategory(catId, getActiveUid());
       toast.success(`Removed category ${catName}`, 'Category Deleted');
     } catch (e) {
       console.error(e);
@@ -418,11 +431,12 @@ export default function DashboardLayout({ children }) {
 
   const handleSaveVendor = async (vendorData) => {
     try {
+      const activeUid = getActiveUid();
       if (vendorToEdit) {
-        await updateVendor(vendorToEdit.id, vendorData, currentUid);
+        await updateVendor(vendorToEdit.id, vendorData, activeUid);
         toast.success(`Updated vendor ${vendorData.name}`, 'Vendor Profile Saved');
       } else {
-        await addVendor(vendorData, currentUid);
+        await addVendor(vendorData, activeUid);
         toast.success(`Registered new vendor ${vendorData.name}`, 'Vendor Registered');
       }
     } catch (e) {
@@ -433,7 +447,7 @@ export default function DashboardLayout({ children }) {
 
   const handleDeleteVendor = async (vendorId, vendorName) => {
     try {
-      await deleteVendor(vendorId, currentUid);
+      await deleteVendor(vendorId, getActiveUid());
       toast.success(`Removed vendor ${vendorName}`, 'Vendor Deleted');
     } catch (e) {
       console.error(e);
@@ -443,7 +457,7 @@ export default function DashboardLayout({ children }) {
 
   const handleMapVendorPrice = async (itemId, mappingData) => {
     try {
-      const updated = await addVendorPriceMapping(itemId, mappingData, currentUid, currentUser?.displayName || 'Café Manager');
+      const updated = await addVendorPriceMapping(itemId, mappingData, getActiveUid(), currentUser?.displayName || 'Café Manager');
       if (updated) {
         setItems((prev) => prev.map((i) => (i.id === updated.id ? updated : i)));
         toast.success(`Mapped price book for ${mappingData.vendorName} @ ₹${mappingData.unitPrice}`, 'Price Agreement Saved');
@@ -456,7 +470,7 @@ export default function DashboardLayout({ children }) {
 
   const handleUnmapVendorPrice = async (itemId, mappingId, vendorName) => {
     try {
-      const updated = await removeVendorPriceMapping(itemId, mappingId, currentUid);
+      const updated = await removeVendorPriceMapping(itemId, mappingId, getActiveUid());
       if (updated) {
         setItems((prev) => prev.map((i) => (i.id === updated.id ? updated : i)));
         toast.success(`Removed price agreement for ${vendorName || 'vendor'}`, 'Agreement Removed');
@@ -471,7 +485,7 @@ export default function DashboardLayout({ children }) {
     try {
       const approved = await approveSupplierApplication(
         appId,
-        currentUid,
+        getActiveUid(),
         currentUser?.displayName || 'Café Manager',
         appObj
       );
@@ -491,7 +505,7 @@ export default function DashboardLayout({ children }) {
 
   const handleRejectSupplierApplication = async (appId, companyName) => {
     try {
-      await rejectSupplierApplication(appId, currentUid, currentUser?.displayName || 'Café Manager');
+      await rejectSupplierApplication(appId, getActiveUid(), currentUser?.displayName || 'Café Manager');
       setSupplierApplications((prev) =>
         prev.map((a) =>
           a.id === appId || a.rawId === appId || (companyName && a.companyName === companyName)
@@ -519,11 +533,12 @@ export default function DashboardLayout({ children }) {
 
   const handleSaveStaff = async (staffData) => {
     try {
+      const activeUid = getActiveUid();
       if (staffToEdit) {
-        await updateStaffMember(staffToEdit.id, staffData, currentUid, currentUser?.displayName || 'Café Admin');
+        await updateStaffMember(staffToEdit.id, staffData, activeUid, currentUser?.displayName || 'Café Admin');
         toast.success(`Updated staff details for ${staffData.name}!`, 'Staff Updated');
       } else {
-        await addStaffMember(staffData, currentUid, currentUser?.displayName || 'Café Admin');
+        await addStaffMember(staffData, activeUid, currentUser?.displayName || 'Café Admin');
         
         // Dispatch onboarding email with 4-digit PIN
         if (staffData.sendEmailInvite && staffData.email) {
@@ -569,7 +584,7 @@ export default function DashboardLayout({ children }) {
   const handleDeleteStaff = async (staffId, staffName) => {
     try {
       setStaffMembers((prev) => prev.filter((s) => s.id !== staffId));
-      await deleteStaffMember(staffId, currentUid, currentUser?.displayName || 'Café Admin');
+      await deleteStaffMember(staffId, getActiveUid(), currentUser?.displayName || 'Café Admin');
       toast.success(`Removed ${staffName} from staff directory`, 'Staff Removed');
     } catch (e) {
       console.error(e);
@@ -579,7 +594,7 @@ export default function DashboardLayout({ children }) {
 
   const handleToggleStaffStatus = async (staffId, newStatus, staffName) => {
     try {
-      await toggleStaffStatus(staffId, newStatus, currentUid, currentUser?.displayName || 'Café Admin');
+      await toggleStaffStatus(staffId, newStatus, getActiveUid(), currentUser?.displayName || 'Café Admin');
       toast.info(`Changed ${staffName}'s status to ${newStatus}`, 'Status Updated');
     } catch (e) {
       console.error(e);

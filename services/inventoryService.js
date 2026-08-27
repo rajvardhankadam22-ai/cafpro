@@ -143,8 +143,20 @@ function setLocalData(key, data) {
   } catch (e) {}
 }
 
+export function resolveUid(userId) {
+  if (userId && userId !== 'guest' && userId !== 'all') return userId;
+  if (typeof window !== 'undefined') {
+    try {
+      const session = JSON.parse(localStorage.getItem('cafepulse_user_session') || '{}');
+      if (session?.storeUid && session.storeUid !== 'guest') return session.storeUid;
+      if (session?.uid && session.uid !== 'guest') return session.uid;
+    } catch (e) {}
+  }
+  return DEFAULT_USER_ID;
+}
+
 export function logActivity(userId = DEFAULT_USER_ID, type, itemId, itemName, detail, userName = 'Café Manager', extraMeta = {}) {
-  const uid = userId || DEFAULT_USER_ID;
+  const uid = resolveUid(userId);
   const logEntry = {
     id: 'log-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
     userId: uid,
@@ -225,7 +237,7 @@ export function subscribeToInventory(userId, callback) {
     return bus.on('all_items_updated', () => callback(getAllLocalItems()));
   }
 
-  const uid = userId;
+  const uid = resolveUid(userId);
   const localKey = getLocalItemsKey(uid);
 
   // Deliver cached local session immediately for zero-lag UI
@@ -320,7 +332,7 @@ export function subscribeToInventory(userId, callback) {
  * 2. Subscribe to Categories
  */
 export function subscribeToCategories(userId, callback) {
-  const uid = userId || DEFAULT_USER_ID;
+  const uid = resolveUid(userId);
   const localCatsKey = getLocalCatsKey(uid);
 
   // Deliver cached categories immediately
@@ -400,7 +412,7 @@ export function subscribeToCategories(userId, callback) {
  * 3. Subscribe to Activity Logs (Realtime Dual-Channel)
  */
 export function subscribeToActivityLogs(userId, callback) {
-  const uid = userId || DEFAULT_USER_ID;
+  const uid = resolveUid(userId);
 
   // 1. Immediate local session delivery
   const initialLogs = getLocalData(getLocalLogsKey(uid), []);
@@ -507,7 +519,7 @@ export function subscribeToPurchaseOrders(userId, callback) {
     return busUnsub;
   }
 
-  const uid = userId;
+  const uid = resolveUid(userId);
   const localKey = getLocalPosKey(uid);
   const localPos = getLocalData(localKey, INITIAL_PURCHASE_ORDERS);
   callback(deduplicateByNewest(localPos));
@@ -586,7 +598,7 @@ export function subscribeToPurchaseOrders(userId, callback) {
  * 5. Add Inventory Item
  */
 export async function addInventoryItem(itemData, userId = DEFAULT_USER_ID) {
-  const uid = userId || DEFAULT_USER_ID;
+  const uid = resolveUid(userId);
   const newId = itemData.id || ('item-' + Date.now() + '-' + Math.random().toString(36).substring(2, 5));
   const cleanData = {
     id: newId,
@@ -603,7 +615,18 @@ export async function addInventoryItem(itemData, userId = DEFAULT_USER_ID) {
     parLevel: Math.max(Number(itemData.reorderLevel) || 5, Number(itemData.parLevel) || 20),
     supplier: itemData.supplier ? itemData.supplier.trim() : 'Local Supplier',
     notes: itemData.notes ? itemData.notes.trim() : '',
-    vendorMappings: Array.isArray(itemData.vendorMappings) ? itemData.vendorMappings : [],
+    vendorMappings: Array.isArray(itemData.vendorMappings)
+      ? itemData.vendorMappings.map((m) => ({
+          mappingId: m.mappingId || `vm-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`,
+          vendorName: m.vendorName || '',
+          vendorItemName: m.vendorItemName || (itemData.name || '').trim(),
+          vendorSku: m.vendorSku || '',
+          unitPrice: Number(m.unitPrice) || 0,
+          isPreferred: Boolean(m.isPreferred),
+          leadTimeDays: Number(m.leadTimeDays) || 2,
+          notes: m.notes || '',
+        }))
+      : [],
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
@@ -616,7 +639,7 @@ export async function addInventoryItem(itemData, userId = DEFAULT_USER_ID) {
         updatedAt: serverTimestamp(),
       });
     } catch (e) {
-      console.warn('Firestore add item notice:', e);
+      console.error('Firestore add item notice:', e);
     }
   }
 
@@ -638,7 +661,7 @@ export async function addInventoryItem(itemData, userId = DEFAULT_USER_ID) {
  * 6. Update Inventory Item
  */
 export async function updateInventoryItem(id, updatedData, userId = DEFAULT_USER_ID) {
-  const uid = userId || DEFAULT_USER_ID;
+  const uid = resolveUid(userId);
   const cleanData = { ...updatedData, userId: uid, id, updatedAt: new Date().toISOString() };
   if (cleanData.quantity !== undefined) cleanData.quantity = Math.max(0, Number(cleanData.quantity));
   if (cleanData.unitPrice !== undefined) cleanData.unitPrice = Math.max(0, Number(cleanData.unitPrice));
@@ -655,7 +678,7 @@ export async function updateInventoryItem(id, updatedData, userId = DEFAULT_USER
         deleteDoc(doc(db, 'inventory_items', `${uid}_${id}`)).catch(() => {});
       }
     } catch (e) {
-      console.warn('Firestore update notice:', e);
+      console.error('Firestore update notice:', e);
     }
   }
 
@@ -678,7 +701,7 @@ export async function updateInventoryItem(id, updatedData, userId = DEFAULT_USER
  * 7. Delete Inventory Item
  */
 export async function deleteInventoryItem(id, userId = DEFAULT_USER_ID, itemName = 'Item', userName = 'Café Manager') {
-  const uid = userId || DEFAULT_USER_ID;
+  const uid = resolveUid(userId);
   const cleanItemName = itemName || 'Item';
 
   if (isFirebaseConfigured() && db) {
@@ -688,7 +711,7 @@ export async function deleteInventoryItem(id, userId = DEFAULT_USER_ID, itemName
         deleteDoc(doc(db, 'inventory_items', `${uid}_${id}`)).catch(() => {});
       }
     } catch (e) {
-      console.warn('Firestore delete item notice:', e);
+      console.error('Firestore delete item notice:', e);
     }
   }
 
@@ -706,7 +729,7 @@ export async function deleteInventoryItem(id, userId = DEFAULT_USER_ID, itemName
  * 8. Quick Adjust Quantity (Floor POS & Quick Stock Update)
  */
 export async function quickAdjustQuantity(id, delta, userId = DEFAULT_USER_ID, itemName = 'Item', userName = 'Barista Floor') {
-  const uid = userId || DEFAULT_USER_ID;
+  const uid = resolveUid(userId);
   const numDelta = Number(delta);
   if (isNaN(numDelta) || numDelta === 0) return;
 
@@ -1146,7 +1169,7 @@ const OLD_DEMO_VENDOR_KEYWORDS = [
 ];
 
 export function subscribeToVendors(userId = DEFAULT_USER_ID, callback) {
-  const uid = userId || DEFAULT_USER_ID;
+  const uid = resolveUid(userId);
   const vendorsKey = getLocalVendorsKey(uid);
 
   let initialVendors = getLocalData(vendorsKey, INITIAL_VENDORS);
@@ -1229,7 +1252,7 @@ export function subscribeToVendors(userId = DEFAULT_USER_ID, callback) {
  * Add New Vendor
  */
 export async function addVendor(vendorData, userId = DEFAULT_USER_ID, userName = 'Manager') {
-  const uid = userId || DEFAULT_USER_ID;
+  const uid = resolveUid(userId);
   const vendorsKey = getLocalVendorsKey(uid);
   const currentVendors = getLocalData(vendorsKey, []);
 
@@ -1259,7 +1282,7 @@ export async function addVendor(vendorData, userId = DEFAULT_USER_ID, userName =
         updatedAt: serverTimestamp(),
       });
     } catch (e) {
-      console.warn('Notice saving vendor:', e.message);
+      console.error('Notice adding vendor:', e.message);
     }
   }
 
@@ -1459,7 +1482,7 @@ export async function updateVendor(id, updatedData, userId = DEFAULT_USER_ID) {
  * Delete Vendor
  */
 export async function deleteVendor(id, userId = DEFAULT_USER_ID) {
-  const uid = userId || DEFAULT_USER_ID;
+  const uid = resolveUid(userId);
 
   if (isFirebaseConfigured() && db) {
     try {
@@ -1484,7 +1507,7 @@ export async function deleteVendor(id, userId = DEFAULT_USER_ID) {
  * Categories CRUD
  */
 export async function addCategory(categoryData, userId = DEFAULT_USER_ID) {
-  const uid = userId || DEFAULT_USER_ID;
+  const uid = resolveUid(userId);
   const newId = categoryData.id || ('cat-' + Date.now() + '-' + Math.random().toString(36).substring(2, 5));
   const clean = {
     id: newId,
@@ -1505,7 +1528,7 @@ export async function addCategory(categoryData, userId = DEFAULT_USER_ID) {
         updatedAt: serverTimestamp(),
       });
     } catch (e) {
-      console.warn('Notice adding category:', e.message);
+      console.error('Notice adding category:', e.message);
     }
   }
 
@@ -1520,7 +1543,7 @@ export async function addCategory(categoryData, userId = DEFAULT_USER_ID) {
 }
 
 export async function updateCategory(id, updatedData, userId = DEFAULT_USER_ID) {
-  const uid = userId || DEFAULT_USER_ID;
+  const uid = resolveUid(userId);
   const clean = {
     ...updatedData,
     id,
@@ -1539,20 +1562,24 @@ export async function updateCategory(id, updatedData, userId = DEFAULT_USER_ID) 
         deleteDoc(doc(db, 'categories', `${uid}_${id}`)).catch(() => {});
       }
     } catch (e) {
-      console.warn('Notice updating category:', e.message);
+      console.error('Notice updating category:', e.message);
     }
   }
 
   const catsKey = getLocalCategoriesKey(uid);
   const categories = getLocalData(catsKey, INITIAL_CATEGORIES);
-  const updatedCats = categories.map((c) => (c.id === id || c.id === `${uid}_${id}` ? { ...c, ...clean } : c));
-  const deduped = deduplicateByNewest(updatedCats);
+  const updated = categories.map((cat) =>
+    cat.id === id || cat.id === `${uid}_${id}`
+      ? { ...cat, ...clean }
+      : cat
+  );
+  const deduped = deduplicateByNewest(updated);
   setLocalData(catsKey, deduped);
   bus.emit(`categories_${uid}`, deduped);
 }
 
 export async function deleteCategory(id, userId = DEFAULT_USER_ID) {
-  const uid = userId || DEFAULT_USER_ID;
+  const uid = resolveUid(userId);
 
   if (isFirebaseConfigured() && db) {
     try {
@@ -2132,7 +2159,7 @@ export async function rejectSupplierApplication(applicationId, userId = DEFAULT_
  * Real-time Staff Members Subscription
  */
 export function subscribeToStaffMembers(userId = DEFAULT_USER_ID, callback) {
-  const uid = userId || DEFAULT_USER_ID;
+  const uid = resolveUid(userId);
   const staffKey = getLocalStaffKey(uid);
 
   let initialStaff = getLocalData(staffKey, INITIAL_STAFF_MEMBERS);
@@ -2199,7 +2226,7 @@ export function subscribeToStaffMembers(userId = DEFAULT_USER_ID, callback) {
  * Add New Staff Member
  */
 export async function addStaffMember(staffData, userId = DEFAULT_USER_ID, userName = 'Café Admin') {
-  const uid = userId || DEFAULT_USER_ID;
+  const uid = resolveUid(userId);
   const staffKey = getLocalStaffKey(uid);
   const currentStaff = getLocalData(staffKey, []);
 
@@ -2229,7 +2256,7 @@ export async function addStaffMember(staffData, userId = DEFAULT_USER_ID, userNa
         updatedAt: serverTimestamp(),
       });
     } catch (e) {
-      console.warn('Notice saving staff member:', e.message);
+      console.error('Notice saving staff member:', e.message);
     }
   }
 
@@ -2253,7 +2280,7 @@ export async function addStaffMember(staffData, userId = DEFAULT_USER_ID, userNa
  * Update Staff Member
  */
 export async function updateStaffMember(id, staffData, userId = DEFAULT_USER_ID, userName = 'Café Admin') {
-  const uid = userId || DEFAULT_USER_ID;
+  const uid = resolveUid(userId);
   const staffKey = getLocalStaffKey(uid);
   const currentStaff = getLocalData(staffKey, []);
   const cleanData = {
@@ -2273,7 +2300,7 @@ export async function updateStaffMember(id, staffData, userId = DEFAULT_USER_ID,
         deleteDoc(doc(db, 'staff_members', `${uid}_${id}`)).catch(() => {});
       }
     } catch (e) {
-      console.warn('Notice updating staff member:', e.message);
+      console.error('Notice updating staff member:', e.message);
     }
   }
 
@@ -2298,7 +2325,7 @@ export async function updateStaffMember(id, staffData, userId = DEFAULT_USER_ID,
  * Delete Staff Member
  */
 export async function deleteStaffMember(id, userId = DEFAULT_USER_ID, userName = 'Café Admin') {
-  const uid = userId || DEFAULT_USER_ID;
+  const uid = resolveUid(userId);
   const staffKey = getLocalStaffKey(uid);
   const currentStaff = getLocalData(staffKey, []);
   const target = currentStaff.find((s) => s.id === id || s.id === `${uid}_${id}`);
@@ -2321,7 +2348,7 @@ export async function deleteStaffMember(id, userId = DEFAULT_USER_ID, userName =
         }
       }
     } catch (e) {
-      console.warn('Notice deleting staff member:', e.message);
+      console.error('Notice deleting staff member:', e.message);
     }
   }
 
@@ -2344,7 +2371,7 @@ export async function deleteStaffMember(id, userId = DEFAULT_USER_ID, userName =
  * Toggle Staff Active / Inactive Status
  */
 export async function toggleStaffStatus(id, newStatus, userId = DEFAULT_USER_ID, userName = 'Café Admin') {
-  const uid = userId || DEFAULT_USER_ID;
+  const uid = resolveUid(userId);
   const staffKey = getLocalStaffKey(uid);
   const currentStaff = getLocalData(staffKey, []);
   const target = currentStaff.find((s) => s.id === id || s.id === `${uid}_${id}`);
