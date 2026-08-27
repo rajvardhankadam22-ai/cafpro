@@ -28,6 +28,10 @@ function getLocalCatsKey(userId) {
   return `cafepulse_cats_${userId || DEFAULT_USER_ID}`;
 }
 
+function getLocalCategoriesKey(userId) {
+  return getLocalCatsKey(userId);
+}
+
 function getLocalLogsKey(userId) {
   return `cafepulse_logs_${userId || DEFAULT_USER_ID}`;
 }
@@ -188,7 +192,13 @@ export function subscribeToInventory(userId, callback) {
   }
 
   const uid = userId;
+  const localKey = getLocalItemsKey(uid);
 
+  // Deliver cached local session immediately for zero-lag UI
+  const userItems = getLocalData(localKey, INITIAL_INVENTORY_ITEMS);
+  callback(userItems);
+
+  let unsubscribeFirestore = () => {};
   if (isFirebaseConfigured() && db) {
     try {
       const q = query(
@@ -196,47 +206,52 @@ export function subscribeToInventory(userId, callback) {
         where('userId', '==', uid)
       );
 
-      const unsubscribe = onSnapshot(
+      unsubscribeFirestore = onSnapshot(
         q,
         (snapshot) => {
-          if (snapshot.empty) {
-            const local = getLocalData(getLocalItemsKey(uid), INITIAL_INVENTORY_ITEMS);
-            callback(local);
-            return;
-          }
+          if (!snapshot.empty) {
+            const rawItems = snapshot.docs.map((d) => ({
+              ...d.data(),
+              id: d.id,
+            }));
 
-          const rawItems = snapshot.docs.map((d) => ({
-            ...d.data(),
-            id: d.id,
-          }));
+            // Deduplicate items cleanly by doc ID
+            const seen = new Set();
+            const uniqueItems = [];
+            for (const itm of rawItems) {
+              if (itm && itm.id && !seen.has(itm.id)) {
+                seen.add(itm.id);
+                uniqueItems.push(itm);
+              }
+            }
 
-          // Deduplicate items to prevent any clone rows
-          const seen = new Set();
-          const uniqueItems = [];
-          for (const itm of rawItems) {
-            const cleanId = itm.id.replace(`${uid}_`, '');
-            const key = itm.sku ? `${itm.sku}_${cleanId}` : cleanId;
-            if (!seen.has(key)) {
-              seen.add(key);
-              uniqueItems.push(itm);
+            setLocalData(localKey, uniqueItems);
+            callback(uniqueItems);
+          } else {
+            // If cloud is empty, check if we have local offline items to sync up
+            const local = getLocalData(localKey, []);
+            if (local && local.length > 0) {
+              local.forEach((itm) => {
+                setDoc(
+                  doc(db, 'inventory_items', itm.id),
+                  { ...itm, userId: uid, updatedAt: serverTimestamp() },
+                  { merge: true }
+                ).catch(() => {});
+              });
+              callback(local);
+            } else {
+              callback(INITIAL_INVENTORY_ITEMS);
             }
           }
-
-          setLocalData(getLocalItemsKey(uid), uniqueItems);
-          callback(uniqueItems);
         },
         () => {
-          const local = getLocalData(getLocalItemsKey(uid), INITIAL_INVENTORY_ITEMS);
+          const local = getLocalData(localKey, INITIAL_INVENTORY_ITEMS);
           callback(local);
         }
       );
-      return unsubscribe;
     } catch (e) {}
   }
 
-  const localKey = getLocalItemsKey(uid);
-  const userItems = getLocalData(localKey, INITIAL_INVENTORY_ITEMS);
-  setTimeout(() => callback(userItems), 0);
   const unsubBus = bus.on(`inventory_${uid}`, callback);
 
   let handleStorage = null;
@@ -253,6 +268,7 @@ export function subscribeToInventory(userId, callback) {
 
   return () => {
     unsubBus();
+    unsubscribeFirestore();
     if (handleStorage && typeof window !== 'undefined') {
       window.removeEventListener('storage', handleStorage);
     }
@@ -264,7 +280,14 @@ export function subscribeToInventory(userId, callback) {
  */
 export function subscribeToCategories(userId, callback) {
   const uid = userId || DEFAULT_USER_ID;
+  const localCatsKey = getLocalCatsKey(uid);
 
+  // Deliver cached categories immediately
+  const localCats = getLocalData(localCatsKey, INITIAL_CATEGORIES);
+  const initialValid = localCats && localCats.length > 0 ? localCats : INITIAL_CATEGORIES;
+  callback(initialValid);
+
+  let unsubscribeFirestore = () => {};
   if (isFirebaseConfigured() && db) {
     try {
       const q = query(
@@ -272,7 +295,7 @@ export function subscribeToCategories(userId, callback) {
         where('userId', '==', uid)
       );
 
-      const unsubscribe = onSnapshot(
+      unsubscribeFirestore = onSnapshot(
         q,
         (snapshot) => {
           if (!snapshot.empty) {
@@ -280,28 +303,43 @@ export function subscribeToCategories(userId, callback) {
               ...d.data(),
               id: d.id,
             }));
-            setLocalData(getLocalCatsKey(uid), categories);
+            setLocalData(localCatsKey, categories);
             callback(categories);
           } else {
-            const localCats = getLocalData(getLocalCatsKey(uid), INITIAL_CATEGORIES);
-            callback(localCats);
+            // Seed INITIAL_CATEGORIES if empty and sync to Firestore
+            const local = getLocalData(localCatsKey, INITIAL_CATEGORIES);
+            const valid = local && local.length > 0 ? local : INITIAL_CATEGORIES;
+            setLocalData(localCatsKey, valid);
+            callback(valid);
+
+            valid.forEach((cat) => {
+              const catId = cat.id || `cat-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`;
+              setDoc(
+                doc(db, 'categories', `${uid}_${catId}`),
+                {
+                  ...cat,
+                  id: `${uid}_${catId}`,
+                  userId: uid,
+                  createdAt: serverTimestamp(),
+                },
+                { merge: true }
+              ).catch(() => {});
+            });
           }
         },
         () => {
-          const localCats = getLocalData(getLocalCatsKey(uid), INITIAL_CATEGORIES);
-          callback(localCats);
+          const local = getLocalData(localCatsKey, INITIAL_CATEGORIES);
+          callback(local && local.length > 0 ? local : INITIAL_CATEGORIES);
         }
       );
-      return unsubscribe;
     } catch (e) {}
   }
 
-  const localCats = getLocalData(
-    getLocalCatsKey(uid),
-    INITIAL_CATEGORIES
-  );
-  setTimeout(() => callback(localCats), 0);
-  return bus.on(`categories_${uid}`, callback);
+  const unsubBus = bus.on(`categories_${uid}`, callback);
+  return () => {
+    unsubBus();
+    unsubscribeFirestore();
+  };
 }
 
 /**
@@ -436,7 +474,11 @@ export function subscribeToPurchaseOrders(userId, callback) {
   }
 
   const uid = userId;
+  const localKey = getLocalPosKey(uid);
+  const localPos = getLocalData(localKey, INITIAL_PURCHASE_ORDERS);
+  callback(localPos);
 
+  let unsubscribeFirestore = () => {};
   if (isFirebaseConfigured() && db) {
     try {
       const q = query(
@@ -444,7 +486,7 @@ export function subscribeToPurchaseOrders(userId, callback) {
         where('userId', '==', uid)
       );
 
-      const unsubscribe = onSnapshot(
+      unsubscribeFirestore = onSnapshot(
         q,
         (snapshot) => {
           if (!snapshot.empty) {
@@ -461,25 +503,32 @@ export function subscribeToPurchaseOrders(userId, callback) {
               }
             }
             uniquePos.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
-            setLocalData(getLocalPosKey(uid), uniquePos);
+            setLocalData(localKey, uniquePos);
             callback(uniquePos);
           } else {
-            const localPos = getLocalData(getLocalPosKey(uid), INITIAL_PURCHASE_ORDERS);
-            callback(localPos);
+            const local = getLocalData(localKey, []);
+            if (local && local.length > 0) {
+              local.forEach((po) => {
+                setDoc(
+                  doc(db, 'purchase_orders', po.id),
+                  { ...po, userId: uid, createdAt: serverTimestamp() },
+                  { merge: true }
+                ).catch(() => {});
+              });
+              callback(local);
+            } else {
+              callback(INITIAL_PURCHASE_ORDERS);
+            }
           }
         },
         () => {
-          const localPos = getLocalData(getLocalPosKey(uid), INITIAL_PURCHASE_ORDERS);
-          callback(localPos);
+          const local = getLocalData(localKey, INITIAL_PURCHASE_ORDERS);
+          callback(local);
         }
       );
-      return unsubscribe;
     } catch (e) {}
   }
 
-  const localKey = getLocalPosKey(uid);
-  const localPos = getLocalData(localKey, INITIAL_PURCHASE_ORDERS);
-  setTimeout(() => callback(localPos), 0);
   const unsubBus = bus.on(`pos_${uid}`, callback);
 
   let handleStorage = null;
@@ -496,6 +545,7 @@ export function subscribeToPurchaseOrders(userId, callback) {
 
   return () => {
     unsubBus();
+    unsubscribeFirestore();
     if (handleStorage && typeof window !== 'undefined') {
       window.removeEventListener('storage', handleStorage);
     }
@@ -1067,8 +1117,19 @@ export function subscribeToVendors(userId = DEFAULT_USER_ID, callback) {
             setLocalData(vendorsKey, firestoreVendors);
             callback(firestoreVendors);
           } else {
-            setLocalData(vendorsKey, INITIAL_VENDORS);
-            callback(INITIAL_VENDORS);
+            const local = getLocalData(vendorsKey, []);
+            if (local && local.length > 0) {
+              local.forEach((v) => {
+                setDoc(
+                  doc(db, 'vendors', v.id),
+                  { ...v, userId: uid, createdAt: serverTimestamp() },
+                  { merge: true }
+                ).catch(() => {});
+              });
+              callback(local);
+            } else {
+              callback(INITIAL_VENDORS);
+            }
           }
         },
         (err) => {
@@ -1999,8 +2060,19 @@ export function subscribeToStaffMembers(userId = DEFAULT_USER_ID, callback) {
             setLocalData(staffKey, firestoreStaff);
             callback(firestoreStaff);
           } else {
-            setLocalData(staffKey, INITIAL_STAFF_MEMBERS);
-            callback(INITIAL_STAFF_MEMBERS);
+            const local = getLocalData(staffKey, []);
+            if (local && local.length > 0) {
+              local.forEach((s) => {
+                setDoc(
+                  doc(db, 'staff_members', s.id),
+                  { ...s, userId: uid, createdAt: serverTimestamp() },
+                  { merge: true }
+                ).catch(() => {});
+              });
+              callback(local);
+            } else {
+              callback(INITIAL_STAFF_MEMBERS);
+            }
           }
         },
         (err) => {

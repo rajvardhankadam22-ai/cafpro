@@ -188,7 +188,7 @@ export default function DashboardLayout({ children }) {
   // 2. Subscribe to User-Isolated Data
   useEffect(() => {
     if (!authResolved) return;
-    const uid = currentUser?.uid || 'flagship-store-01';
+    const uid = currentUser?.storeUid || currentUser?.uid || 'guest';
     setIsLoading(true);
 
     const unsubInventory = subscribeToInventory(uid, (data) => {
@@ -229,7 +229,7 @@ export default function DashboardLayout({ children }) {
       unsubApps();
       unsubStaff();
     };
-  }, [authResolved, currentUser?.uid]);
+  }, [authResolved, currentUser?.uid, currentUser?.storeUid]);
 
   // Computed metrics
   const lowStockItems = items.filter(
@@ -243,7 +243,7 @@ export default function DashboardLayout({ children }) {
     0
   );
 
-  const currentUid = currentUser?.uid || 'flagship-store-01';
+  const currentUid = currentUser?.storeUid || currentUser?.uid || 'guest';
 
   // Handlers
   const handleOpenAddItem = () => {

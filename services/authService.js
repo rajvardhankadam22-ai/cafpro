@@ -22,9 +22,20 @@ import {
   serverTimestamp,
 } from 'firebase/firestore';
 import { auth, db, isFirebaseConfigured } from '@/lib/firebase';
-import { INITIAL_STAFF_MEMBERS } from './seedData';
+import { INITIAL_STAFF_MEMBERS, INITIAL_CATEGORIES } from './seedData';
 
 const LOCAL_AUTH_KEY = 'cafepulse_user_session';
+
+export function getDeterministicLocalUid(email) {
+  const clean = (email || '').trim().toLowerCase();
+  if (!clean) return 'local_guest';
+  try {
+    if (typeof btoa === 'function') {
+      return 'local_' + btoa(clean).replace(/[^a-zA-Z0-9]/g, '');
+    }
+  } catch (e) {}
+  return 'local_' + clean.replace(/[^a-zA-Z0-9]/g, '_');
+}
 
 class AuthEventBus {
   constructor() {
@@ -312,10 +323,11 @@ export async function loginWithEmail(email, password) {
   }
 
   // C. Local Fallback Admin Login
+  const cleanUid = getDeterministicLocalUid(cleanEmail);
   const user = {
-    uid: 'user-' + Date.now(),
-    email: email.trim(),
-    displayName: email.split('@')[0],
+    uid: cleanUid,
+    email: cleanEmail,
+    displayName: cleanEmail.split('@')[0],
     role: 'admin',
     roleLabel: 'Store Administrator',
     isStaff: false,
@@ -463,12 +475,22 @@ export async function signupWithEmail(email, password, displayName = '', cafeNam
           isStaff: false,
           createdAt: serverTimestamp(),
         }).catch(() => {});
+
+        // Seed initial categories in Firestore
+        INITIAL_CATEGORIES.forEach((cat) => {
+          setDoc(doc(db, 'categories', `${user.uid}_${cat.id}`), {
+            ...cat,
+            id: `${user.uid}_${cat.id}`,
+            userId: user.uid,
+            createdAt: serverTimestamp(),
+          }, { merge: true }).catch(() => {});
+        });
       }
 
-      // Initialize clean user workspace
+      // Initialize clean user workspace with default categories
       const cleanUid = enrichedUser.uid;
       localStorage.setItem(`cafepulse_items_${cleanUid}`, '[]');
-      localStorage.setItem(`cafepulse_cats_${cleanUid}`, '[]');
+      localStorage.setItem(`cafepulse_cats_${cleanUid}`, JSON.stringify(INITIAL_CATEGORIES));
       localStorage.setItem(`cafepulse_pos_${cleanUid}`, '[]');
       localStorage.setItem(`cafepulse_vendors_${cleanUid}`, '[]');
       localStorage.setItem(`cafepulse_staff_${cleanUid}`, '[]');
@@ -485,7 +507,7 @@ export async function signupWithEmail(email, password, displayName = '', cafeNam
     }
   }
 
-  const cleanUid = 'user-' + Date.now();
+  const cleanUid = getDeterministicLocalUid(email);
   const user = {
     uid: cleanUid,
     email: email.trim(),
@@ -498,7 +520,7 @@ export async function signupWithEmail(email, password, displayName = '', cafeNam
     photoURL: null,
   };
   localStorage.setItem(`cafepulse_items_${cleanUid}`, '[]');
-  localStorage.setItem(`cafepulse_cats_${cleanUid}`, '[]');
+  localStorage.setItem(`cafepulse_cats_${cleanUid}`, JSON.stringify(INITIAL_CATEGORIES));
   localStorage.setItem(`cafepulse_pos_${cleanUid}`, '[]');
   localStorage.setItem(`cafepulse_vendors_${cleanUid}`, '[]');
   localStorage.setItem(`cafepulse_staff_${cleanUid}`, '[]');
