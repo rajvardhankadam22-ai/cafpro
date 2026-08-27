@@ -192,7 +192,17 @@ export default function DashboardLayout({ children }) {
     setIsLoading(true);
 
     const unsubInventory = subscribeToInventory(uid, (data) => {
-      if (Array.isArray(data)) setItems(data);
+      if (Array.isArray(data)) {
+        const seen = new Set();
+        const unique = [];
+        for (const item of data) {
+          if (item && item.id && !seen.has(item.id)) {
+            seen.add(item.id);
+            unique.push(item);
+          }
+        }
+        setItems(unique);
+      }
       setIsLoading(false);
     });
 
@@ -259,14 +269,10 @@ export default function DashboardLayout({ children }) {
   const handleSaveItem = async (itemData) => {
     try {
       if (itemToEdit) {
-        setItems((prev) =>
-          prev.map((i) => (i.id === itemToEdit.id ? { ...i, ...itemData, updatedAt: new Date().toISOString() } : i))
-        );
         await updateInventoryItem(itemToEdit.id, itemData, currentUid);
         toast.success(`Updated ${itemData.name}`, 'Item Updated');
       } else {
-        const newItem = await addInventoryItem(itemData, currentUid);
-        if (newItem) setItems((prev) => [newItem, ...prev]);
+        await addInventoryItem(itemData, currentUid);
         toast.success(`Added ${itemData.name} to catalogue`, 'Item Added');
       }
     } catch (e) {
@@ -285,7 +291,6 @@ export default function DashboardLayout({ children }) {
     try {
       setIsDeleting(true);
       const deletedId = itemToDelete.id;
-      setItems((prev) => prev.filter((i) => i.id !== deletedId));
       await deleteInventoryItem(deletedId, currentUid, itemToDelete.name);
       toast.success(`Deleted ${itemToDelete.name}`, 'Item Removed');
       setIsDeleteModalOpen(false);
@@ -300,15 +305,6 @@ export default function DashboardLayout({ children }) {
 
   const handleAdjustQuantity = async (itemId, delta, itemName) => {
     try {
-      setItems((prev) =>
-        prev.map((i) => {
-          if (i.id === itemId) {
-            const newQ = Math.max(0, (Number(i.quantity) || 0) + delta);
-            return { ...i, quantity: newQ, updatedAt: new Date().toISOString() };
-          }
-          return i;
-        })
-      );
       const actorName = `${currentUser?.displayName || 'Floor Staff'} (${currentUser?.roleLabel || currentUser?.role || 'Staff'})`;
       await quickAdjustQuantity(itemId, delta, currentUid, itemName, actorName);
     } catch (e) {
@@ -338,10 +334,6 @@ export default function DashboardLayout({ children }) {
   const handleSavePurchaseOrder = async (poData) => {
     try {
       const newPo = await createPurchaseOrder(poData, currentUid);
-      setPurchaseOrders((prev) => {
-        if (prev.some((p) => p.id === newPo.id)) return prev;
-        return [newPo, ...prev];
-      });
       toast.success(`Created ${newPo.poNumber} for ${newPo.supplierName}`, 'Purchase Order Issued');
     } catch (e) {
       console.error(e);
@@ -357,7 +349,6 @@ export default function DashboardLayout({ children }) {
   const handleReconcileGoodsReceipt = async (poId, deliveryData, receiverName) => {
     try {
       const updatedPo = await receivePurchaseOrder(poId, deliveryData, currentUid, receiverName);
-      setPurchaseOrders((prev) => prev.map((p) => (p.id === poId ? updatedPo : p)));
       toast.success(`Goods receipt reconciled for ${updatedPo.poNumber}! Stock updated.`, 'Delivery Received');
     } catch (e) {
       console.error(e);
@@ -378,14 +369,10 @@ export default function DashboardLayout({ children }) {
   const handleSaveCategory = async (catData) => {
     try {
       if (categoryToEdit) {
-        setCategories((prev) =>
-          prev.map((c) => (c.id === categoryToEdit.id ? { ...c, ...catData } : c))
-        );
         await updateCategory(categoryToEdit.id, catData, currentUid);
         toast.success(`Updated category ${catData.name}`, 'Category Updated');
       } else {
-        const newCatId = await addCategory(catData, currentUid);
-        setCategories((prev) => [...prev, { id: newCatId, ...catData }]);
+        await addCategory(catData, currentUid);
         toast.success(`Created category ${catData.name}`, 'Category Created');
       }
     } catch (e) {
@@ -396,12 +383,6 @@ export default function DashboardLayout({ children }) {
 
   const handleDeleteCategory = async (catId, catName) => {
     try {
-      setCategories((prev) => prev.filter((c) => c.id !== catId));
-      const remainingCats = categories.filter((c) => c.id !== catId);
-      const fallbackCatId = remainingCats.length > 0 ? remainingCats[0].id : '';
-      setItems((prev) =>
-        prev.map((i) => (i.categoryId === catId ? { ...i, categoryId: fallbackCatId } : i))
-      );
       await deleteCategory(catId, currentUid);
       toast.success(`Removed category ${catName}`, 'Category Deleted');
     } catch (e) {
@@ -424,14 +405,10 @@ export default function DashboardLayout({ children }) {
   const handleSaveVendor = async (vendorData) => {
     try {
       if (vendorToEdit) {
-        setVendors((prev) =>
-          prev.map((v) => (v.id === vendorToEdit.id ? { ...v, ...vendorData } : v))
-        );
         await updateVendor(vendorToEdit.id, vendorData, currentUid);
         toast.success(`Updated vendor ${vendorData.name}`, 'Vendor Profile Saved');
       } else {
-        const newVendor = await addVendor(vendorData, currentUid);
-        if (newVendor) setVendors((prev) => [newVendor, ...prev]);
+        await addVendor(vendorData, currentUid);
         toast.success(`Registered new vendor ${vendorData.name}`, 'Vendor Registered');
       }
     } catch (e) {
@@ -442,7 +419,6 @@ export default function DashboardLayout({ children }) {
 
   const handleDeleteVendor = async (vendorId, vendorName) => {
     try {
-      setVendors((prev) => prev.filter((v) => v.id !== vendorId));
       await deleteVendor(vendorId, currentUid);
       toast.success(`Removed vendor ${vendorName}`, 'Vendor Deleted');
     } catch (e) {

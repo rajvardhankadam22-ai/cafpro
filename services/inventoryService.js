@@ -194,8 +194,18 @@ export function subscribeToInventory(userId, callback) {
   const uid = userId;
   const localKey = getLocalItemsKey(uid);
 
-  // Deliver cached local session immediately for zero-lag UI
-  const userItems = getLocalData(localKey, INITIAL_INVENTORY_ITEMS);
+  // Deliver cached local session immediately for zero-lag UI, deduplicating IDs
+  const rawLocal = getLocalData(localKey, INITIAL_INVENTORY_ITEMS);
+  const seenInitial = new Set();
+  const userItems = [];
+  if (Array.isArray(rawLocal)) {
+    for (const itm of rawLocal) {
+      if (itm && itm.id && !seenInitial.has(itm.id)) {
+        seenInitial.add(itm.id);
+        userItems.push(itm);
+      }
+    }
+  }
   callback(userItems);
 
   let unsubscribeFirestore = () => {};
@@ -252,7 +262,19 @@ export function subscribeToInventory(userId, callback) {
     } catch (e) {}
   }
 
-  const unsubBus = bus.on(`inventory_${uid}`, callback);
+  const unsubBus = bus.on(`inventory_${uid}`, (updated) => {
+    if (Array.isArray(updated)) {
+      const seen = new Set();
+      const unique = [];
+      for (const itm of updated) {
+        if (itm && itm.id && !seen.has(itm.id)) {
+          seen.add(itm.id);
+          unique.push(itm);
+        }
+      }
+      callback(unique);
+    }
+  });
 
   let handleStorage = null;
   if (typeof window !== 'undefined') {
@@ -597,7 +619,7 @@ export async function addInventoryItem(itemData, userId = DEFAULT_USER_ID) {
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
-  const updated = [newItem, ...items];
+  const updated = [newItem, ...items.filter((i) => i.id !== newId)];
   setLocalData(itemsKey, updated);
   bus.emit(`inventory_${uid}`, updated);
 
@@ -1186,7 +1208,7 @@ export async function addVendor(vendorData, userId = DEFAULT_USER_ID, userName =
     }
   }
 
-  const updatedVendors = [newVendor, ...currentVendors];
+  const updatedVendors = [newVendor, ...currentVendors.filter((v) => v.id !== newVendor.id)];
   setLocalData(vendorsKey, updatedVendors);
   bus.emit(`vendors_${uid}`, updatedVendors);
   bus.emit('all_vendors_updated', updatedVendors);
@@ -1377,7 +1399,7 @@ export async function addCategory(categoryData, userId = DEFAULT_USER_ID) {
     ...clean,
     createdAt: new Date().toISOString(),
   };
-  const updatedCats = [newCat, ...categories];
+  const updatedCats = [newCat, ...categories.filter((c) => c.id !== newId)];
   setLocalData(catsKey, updatedCats);
   bus.emit(`categories_${uid}`, updatedCats);
 
@@ -2126,7 +2148,7 @@ export async function addStaffMember(staffData, userId = DEFAULT_USER_ID, userNa
     }
   }
 
-  const updatedStaff = [newStaff, ...currentStaff];
+  const updatedStaff = [newStaff, ...currentStaff.filter((s) => s.id !== newStaff.id)];
   setLocalData(staffKey, updatedStaff);
   bus.emit(`staff_${uid}`, updatedStaff);
 

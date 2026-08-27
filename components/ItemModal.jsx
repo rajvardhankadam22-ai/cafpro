@@ -205,6 +205,7 @@ export default function ItemModal({
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (isSubmitting) return;
     if (!validate()) return;
 
     try {
