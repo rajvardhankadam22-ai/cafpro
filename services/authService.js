@@ -423,6 +423,10 @@ export async function loginWithEmail(email, password) {
       const user = userCredential.user;
       let userCafeName = 'Artisan Specialty Café';
       let userBranchName = 'Main Flagship Branch';
+      let userRole = 'admin';
+      let userRoleLabel = 'Store Administrator';
+      let isStaffUser = false;
+      let storeUid = user.uid;
 
       if (db) {
         try {
@@ -431,9 +435,14 @@ export async function loginWithEmail(email, password) {
             const uData = uDoc.data();
             if (uData.cafeName) userCafeName = uData.cafeName;
             if (uData.branchName) userBranchName = uData.branchName;
+            if (uData.role) userRole = uData.role;
+            if (uData.roleLabel) userRoleLabel = uData.roleLabel;
+            if (uData.isStaff !== undefined) isStaffUser = Boolean(uData.isStaff);
+            if (uData.storeUid) storeUid = uData.storeUid;
           } else {
             await setDoc(doc(db, 'users', user.uid), {
               uid: user.uid,
+              storeUid: user.uid,
               email: user.email,
               displayName: user.displayName || user.email.split('@')[0],
               cafeName: userCafeName,
@@ -449,15 +458,15 @@ export async function loginWithEmail(email, password) {
 
       const enrichedUser = {
         uid: user.uid,
-        storeUid: user.uid,
+        storeUid: storeUid,
         email: user.email,
         displayName: user.displayName || user.email.split('@')[0],
         cafeName: userCafeName,
         branchName: userBranchName,
-        role: 'admin',
-        roleLabel: 'Store Administrator',
-        isStaff: false,
-        isRoleLocked: false,
+        role: userRole,
+        roleLabel: userRoleLabel,
+        isStaff: isStaffUser,
+        isRoleLocked: isStaffUser,
         photoURL: user.photoURL || null,
       };
       registerCafeInDirectory(enrichedUser);
@@ -630,12 +639,12 @@ export async function signupWithEmail(email, password, displayName = '', cafeNam
 
           // Seed initial categories in Firestore
           for (const cat of INITIAL_CATEGORIES) {
-            await setDoc(doc(db, 'categories', `${user.uid}_${cat.id}`), {
+            await setDoc(doc(db, 'categories', cat.id), {
               ...cat,
               id: cat.id,
-              originalId: cat.id,
               userId: user.uid,
               createdAt: serverTimestamp(),
+              updatedAt: serverTimestamp(),
             }, { merge: true });
           }
         } catch (dbErr) {
@@ -703,6 +712,10 @@ export async function loginWithGoogle() {
 
       let userCafeName = 'Artisan Specialty Café';
       let userBranchName = 'Main Flagship Branch';
+      let userRole = 'admin';
+      let userRoleLabel = 'Store Admin & General Manager';
+      let isStaffUser = false;
+      let storeUid = user.uid;
 
       if (db) {
         try {
@@ -711,21 +724,25 @@ export async function loginWithGoogle() {
             const uData = uDoc.data();
             if (uData.cafeName) userCafeName = uData.cafeName;
             if (uData.branchName) userBranchName = uData.branchName;
+            if (uData.role) userRole = uData.role;
+            if (uData.roleLabel) userRoleLabel = uData.roleLabel;
+            if (uData.isStaff !== undefined) isStaffUser = Boolean(uData.isStaff);
+            if (uData.storeUid) storeUid = uData.storeUid;
           }
         } catch (e) {}
       }
 
       const enrichedUser = {
         uid: user.uid,
-        storeUid: user.uid,
+        storeUid: storeUid,
         email: user.email,
         displayName: user.displayName || user.email.split('@')[0],
         cafeName: userCafeName,
         branchName: userBranchName,
-        role: 'admin',
-        roleLabel: 'Store Admin & General Manager',
-        isStaff: false,
-        isRoleLocked: false,
+        role: userRole,
+        roleLabel: userRoleLabel,
+        isStaff: isStaffUser,
+        isRoleLocked: isStaffUser,
         photoURL: user.photoURL || null,
       };
 
@@ -734,13 +751,13 @@ export async function loginWithGoogle() {
           doc(db, 'users', user.uid),
           {
             uid: user.uid,
-            storeUid: user.uid,
+            storeUid: storeUid,
             email: user.email,
             displayName: enrichedUser.displayName,
             photoURL: enrichedUser.photoURL,
-            role: 'admin',
-            roleLabel: 'Store Admin & General Manager',
-            isStaff: false,
+            role: userRole,
+            roleLabel: userRoleLabel,
+            isStaff: isStaffUser,
             lastLogin: serverTimestamp(),
           },
           { merge: true }

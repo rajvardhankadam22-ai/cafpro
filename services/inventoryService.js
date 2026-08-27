@@ -82,6 +82,46 @@ class LocalEventBus {
 
 const bus = new LocalEventBus();
 
+export function getDocTimestamp(docData) {
+  if (!docData) return 0;
+  const ts = docData.updatedAt || docData.createdAt || docData.timestamp;
+  if (!ts) return 0;
+  if (typeof ts === 'object' && typeof ts.seconds === 'number') {
+    return ts.seconds * 1000 + (ts.nanoseconds ? ts.nanoseconds / 1000000 : 0);
+  }
+  if (typeof ts === 'string') {
+    const parsed = new Date(ts).getTime();
+    return isNaN(parsed) ? 0 : parsed;
+  }
+  if (typeof ts === 'number') return ts;
+  return 0;
+}
+
+export function deduplicateByNewest(items) {
+  if (!Array.isArray(items)) return [];
+  const sorted = [...items].sort((a, b) => getDocTimestamp(b) - getDocTimestamp(a));
+  const seen = new Set();
+  const result = [];
+  for (const item of sorted) {
+    if (!item) continue;
+    const rawId = String(item.id || item.docId || '').trim();
+    if (!rawId) continue;
+    const unPrefixedId = rawId.includes('_item-') || rawId.includes('_cat-') || rawId.includes('_po-') || rawId.includes('_ven-') || rawId.includes('_staff-')
+      ? rawId.substring(rawId.indexOf('_') + 1)
+      : rawId;
+
+    if (!seen.has(rawId) && !seen.has(unPrefixedId)) {
+      seen.add(rawId);
+      seen.add(unPrefixedId);
+      result.push({
+        ...item,
+        id: item.id || unPrefixedId,
+      });
+    }
+  }
+  return result;
+}
+
 function getLocalData(key, defaultData) {
   if (typeof window === 'undefined') return defaultData;
   try {
@@ -140,23 +180,18 @@ export function subscribeToInventory(userId, callback) {
   // If userId is null or 'all', subscribe to ALL inventory items across all cafes
   if (!userId || userId === 'all') {
     const getAllLocalItems = () => {
-      const seen = new Set();
       const allItems = [];
       if (typeof window !== 'undefined') {
         for (let i = 0; i < localStorage.length; i++) {
           const k = localStorage.key(i);
           if (k && k.startsWith('cafepulse_items_')) {
             const list = getLocalData(k, []);
-            for (const itm of list) {
-              if (itm && itm.id && !seen.has(itm.id)) {
-                seen.add(itm.id);
-                allItems.push(itm);
-              }
-            }
+            if (Array.isArray(list)) allItems.push(...list);
           }
         }
       }
-      return allItems.length > 0 ? allItems : INITIAL_INVENTORY_ITEMS;
+      const deduped = deduplicateByNewest(allItems);
+      return deduped.length > 0 ? deduped : INITIAL_INVENTORY_ITEMS;
     };
 
     if (isFirebaseConfigured() && db) {
@@ -166,47 +201,36 @@ export function subscribeToInventory(userId, callback) {
           q,
           (snapshot) => {
             if (!snapshot.empty) {
-              const rawItems = snapshot.docs.map((d) => ({ ...d.data(), id: d.id }));
-              const seen = new Set();
-              const uniqueItems = [];
-              for (const itm of rawItems) {
-                if (itm && itm.id && !seen.has(itm.id)) {
-                  seen.add(itm.id);
-                  uniqueItems.push(itm);
-                }
-              }
+              const rawItems = snapshot.docs.map((d) => ({
+                ...d.data(),
+                id: d.data().id || d.id,
+                docId: d.id,
+              }));
+              const uniqueItems = deduplicateByNewest(rawItems);
               callback(uniqueItems);
             } else {
               callback(getAllLocalItems());
             }
           },
-          () => callback(getAllLocalItems())
+          (err) => {
+            console.warn('Firestore all inventory snapshot notice:', err);
+            callback(getAllLocalItems());
+          }
         );
         return unsubscribe;
       } catch (e) {}
     }
 
     setTimeout(() => callback(getAllLocalItems()), 0);
-    const busUnsub = bus.on('all_items_updated', () => callback(getAllLocalItems()));
-    return busUnsub;
+    return bus.on('all_items_updated', () => callback(getAllLocalItems()));
   }
 
   const uid = userId;
   const localKey = getLocalItemsKey(uid);
 
-  // Deliver cached local session immediately for zero-lag UI, deduplicating IDs
+  // Deliver cached local session immediately for zero-lag UI
   const rawLocal = getLocalData(localKey, []);
-  const seenInitial = new Set();
-  const userItems = [];
-  if (Array.isArray(rawLocal)) {
-    for (const itm of rawLocal) {
-      if (itm && itm.id && !seenInitial.has(itm.id)) {
-        seenInitial.add(itm.id);
-        userItems.push(itm);
-      }
-    }
-  }
-  callback(userItems);
+  callback(deduplicateByNewest(rawLocal));
 
   let unsubscribeFirestore = () => {};
   if (isFirebaseConfigured() && db) {
@@ -229,19 +253,12 @@ export function subscribeToInventory(userId, callback) {
               };
             });
 
-            // Deduplicate items cleanly by doc ID
-            const seen = new Set();
-            const uniqueItems = [];
-            for (const itm of rawItems) {
-              if (itm && itm.id && !seen.has(itm.id)) {
-                seen.add(itm.id);
-                uniqueItems.push(itm);
-              }
-            }
+            const uniqueItems = deduplicateByNewest(rawItems);
 
             setLocalData(localKey, uniqueItems);
             callback(uniqueItems);
             bus.emit(`inventory_${uid}`, uniqueItems);
+            bus.emit('all_items_updated', uniqueItems);
           } else {
             const local = getLocalData(localKey, uid === 'demo_cafepulse_admin' ? INITIAL_INVENTORY_ITEMS : []);
             if (local && local.length > 0) {
@@ -254,7 +271,7 @@ export function subscribeToInventory(userId, callback) {
                 ).catch(() => {});
               });
               setLocalData(localKey, local);
-              callback(local);
+              callback(deduplicateByNewest(local));
             } else {
               setLocalData(localKey, []);
               callback([]);
@@ -264,7 +281,7 @@ export function subscribeToInventory(userId, callback) {
         (error) => {
           console.warn('Firestore inventory snapshot notice:', error);
           const local = getLocalData(localKey, uid === 'demo_cafepulse_admin' ? INITIAL_INVENTORY_ITEMS : []);
-          callback(local);
+          callback(deduplicateByNewest(local));
         }
       );
     } catch (e) {
@@ -274,15 +291,7 @@ export function subscribeToInventory(userId, callback) {
 
   const unsubBus = bus.on(`inventory_${uid}`, (updated) => {
     if (Array.isArray(updated)) {
-      const seen = new Set();
-      const unique = [];
-      for (const itm of updated) {
-        if (itm && itm.id && !seen.has(itm.id)) {
-          seen.add(itm.id);
-          unique.push(itm);
-        }
-      }
-      callback(unique);
+      callback(deduplicateByNewest(updated));
     }
   });
 
@@ -291,7 +300,7 @@ export function subscribeToInventory(userId, callback) {
     handleStorage = (e) => {
       if (e.key === localKey && e.newValue) {
         try {
-          callback(JSON.parse(e.newValue));
+          callback(deduplicateByNewest(JSON.parse(e.newValue)));
         } catch (err) {}
       }
     };
@@ -317,7 +326,7 @@ export function subscribeToCategories(userId, callback) {
   // Deliver cached categories immediately
   const localCats = getLocalData(localCatsKey, INITIAL_CATEGORIES);
   const initialValid = localCats && localCats.length > 0 ? localCats : INITIAL_CATEGORIES;
-  callback(initialValid);
+  callback(deduplicateByNewest(initialValid));
 
   let unsubscribeFirestore = () => {};
   if (isFirebaseConfigured() && db) {
@@ -331,7 +340,7 @@ export function subscribeToCategories(userId, callback) {
         q,
         (snapshot) => {
           if (!snapshot.empty) {
-            const categories = snapshot.docs.map((d) => {
+            const rawCats = snapshot.docs.map((d) => {
               const data = d.data();
               return {
                 ...data,
@@ -339,26 +348,28 @@ export function subscribeToCategories(userId, callback) {
                 docId: d.id,
               };
             });
-            setLocalData(localCatsKey, categories);
-            callback(categories);
-            bus.emit(`categories_${uid}`, categories);
+            const uniqueCats = deduplicateByNewest(rawCats);
+            setLocalData(localCatsKey, uniqueCats);
+            callback(uniqueCats);
+            bus.emit(`categories_${uid}`, uniqueCats);
           } else {
             // Seed INITIAL_CATEGORIES if empty and sync to Firestore
             const local = getLocalData(localCatsKey, INITIAL_CATEGORIES);
             const valid = local && local.length > 0 ? local : INITIAL_CATEGORIES;
             setLocalData(localCatsKey, valid);
-            callback(valid);
+            callback(deduplicateByNewest(valid));
 
             valid.forEach((cat) => {
               const catId = cat.id || `cat-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`;
               setDoc(
-                doc(db, 'categories', `${uid}_${catId}`),
+                doc(db, 'categories', catId),
                 {
                   ...cat,
                   id: catId,
                   originalId: catId,
                   userId: uid,
                   createdAt: serverTimestamp(),
+                  updatedAt: serverTimestamp(),
                 },
                 { merge: true }
               ).catch(() => {});
@@ -368,7 +379,7 @@ export function subscribeToCategories(userId, callback) {
         (err) => {
           console.warn('Firestore categories snapshot notice:', err);
           const local = getLocalData(localCatsKey, INITIAL_CATEGORIES);
-          callback(local && local.length > 0 ? local : INITIAL_CATEGORIES);
+          callback(deduplicateByNewest(local && local.length > 0 ? local : INITIAL_CATEGORIES));
         }
       );
     } catch (e) {
@@ -376,7 +387,9 @@ export function subscribeToCategories(userId, callback) {
     }
   }
 
-  const unsubBus = bus.on(`categories_${uid}`, callback);
+  const unsubBus = bus.on(`categories_${uid}`, (updated) => {
+    callback(deduplicateByNewest(updated));
+  });
   return () => {
     unsubBus();
     unsubscribeFirestore();
@@ -391,11 +404,11 @@ export function subscribeToActivityLogs(userId, callback) {
 
   // 1. Immediate local session delivery
   const initialLogs = getLocalData(getLocalLogsKey(uid), []);
-  callback(initialLogs);
+  callback(deduplicateByNewest(initialLogs));
 
   // 2. Subscribe to zero-latency local event bus
   const unsubBus = bus.on(`logs_${uid}`, (updated) => {
-    callback(updated);
+    callback(deduplicateByNewest(updated));
   });
 
   // 3. Subscribe to live Firestore collection
@@ -425,15 +438,7 @@ export function subscribeToActivityLogs(userId, callback) {
               };
             });
 
-            // Deduplicate logs
-            const seenIds = new Set();
-            const uniqueLogs = [];
-            for (const l of rawLogs) {
-              if (l && l.id && !seenIds.has(l.id)) {
-                seenIds.add(l.id);
-                uniqueLogs.push(l);
-              }
-            }
+            const uniqueLogs = deduplicateByNewest(rawLogs);
             uniqueLogs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
             setLocalData(getLocalLogsKey(uid), uniqueLogs);
             callback(uniqueLogs);
@@ -461,24 +466,19 @@ export function subscribeToPurchaseOrders(userId, callback) {
   // If userId is null or 'all', subscribe to ALL purchase orders across all cafes
   if (!userId || userId === 'all') {
     const getAllLocalPos = () => {
-      const seen = new Set();
       const allPos = [];
       if (typeof window !== 'undefined') {
         for (let i = 0; i < localStorage.length; i++) {
           const k = localStorage.key(i);
           if (k && k.startsWith('cafepulse_pos_')) {
             const list = getLocalData(k, []);
-            for (const p of list) {
-              if (p && p.id && !seen.has(p.id)) {
-                seen.add(p.id);
-                allPos.push(p);
-              }
-            }
+            if (Array.isArray(list)) allPos.push(...list);
           }
         }
       }
-      allPos.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
-      return allPos.length > 0 ? allPos : INITIAL_PURCHASE_ORDERS;
+      const deduped = deduplicateByNewest(allPos);
+      deduped.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+      return deduped.length > 0 ? deduped : INITIAL_PURCHASE_ORDERS;
     };
 
     if (isFirebaseConfigured() && db) {
@@ -489,14 +489,7 @@ export function subscribeToPurchaseOrders(userId, callback) {
           (snapshot) => {
             if (!snapshot.empty) {
               const rawPos = snapshot.docs.map((d) => ({ ...d.data(), id: d.id }));
-              const seen = new Set();
-              const uniquePos = [];
-              for (const p of rawPos) {
-                if (p && p.id && !seen.has(p.id)) {
-                  seen.add(p.id);
-                  uniquePos.push(p);
-                }
-              }
+              const uniquePos = deduplicateByNewest(rawPos);
               uniquePos.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
               callback(uniquePos);
             } else {
@@ -517,7 +510,7 @@ export function subscribeToPurchaseOrders(userId, callback) {
   const uid = userId;
   const localKey = getLocalPosKey(uid);
   const localPos = getLocalData(localKey, INITIAL_PURCHASE_ORDERS);
-  callback(localPos);
+  callback(deduplicateByNewest(localPos));
 
   let unsubscribeFirestore = () => {};
   if (isFirebaseConfigured() && db) {
@@ -535,28 +528,22 @@ export function subscribeToPurchaseOrders(userId, callback) {
               ...d.data(),
               id: d.id,
             }));
-            const seenIds = new Set();
-            const uniquePos = [];
-            for (const p of rawPos) {
-              if (p && p.id && !seenIds.has(p.id)) {
-                seenIds.add(p.id);
-                uniquePos.push(p);
-              }
-            }
+            const uniquePos = deduplicateByNewest(rawPos);
             uniquePos.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
             setLocalData(localKey, uniquePos);
             callback(uniquePos);
+            bus.emit(`pos_${uid}`, uniquePos);
           } else {
             const local = getLocalData(localKey, []);
             if (local && local.length > 0) {
               local.forEach((po) => {
                 setDoc(
                   doc(db, 'purchase_orders', po.id),
-                  { ...po, userId: uid, createdAt: serverTimestamp() },
+                  { ...po, userId: uid, createdAt: serverTimestamp(), updatedAt: serverTimestamp() },
                   { merge: true }
                 ).catch(() => {});
               });
-              callback(local);
+              callback(deduplicateByNewest(local));
             } else {
               callback(INITIAL_PURCHASE_ORDERS);
             }
@@ -564,20 +551,22 @@ export function subscribeToPurchaseOrders(userId, callback) {
         },
         () => {
           const local = getLocalData(localKey, INITIAL_PURCHASE_ORDERS);
-          callback(local);
+          callback(deduplicateByNewest(local));
         }
       );
     } catch (e) {}
   }
 
-  const unsubBus = bus.on(`pos_${uid}`, callback);
+  const unsubBus = bus.on(`pos_${uid}`, (updated) => {
+    callback(deduplicateByNewest(updated));
+  });
 
   let handleStorage = null;
   if (typeof window !== 'undefined') {
     handleStorage = (e) => {
       if (e.key === localKey && e.newValue) {
         try {
-          callback(JSON.parse(e.newValue));
+          callback(deduplicateByNewest(JSON.parse(e.newValue)));
         } catch (err) {}
       }
     };
@@ -598,7 +587,9 @@ export function subscribeToPurchaseOrders(userId, callback) {
  */
 export async function addInventoryItem(itemData, userId = DEFAULT_USER_ID) {
   const uid = userId || DEFAULT_USER_ID;
+  const newId = itemData.id || ('item-' + Date.now() + '-' + Math.random().toString(36).substring(2, 5));
   const cleanData = {
+    id: newId,
     userId: uid,
     name: (itemData.name || '').trim(),
     categoryId: itemData.categoryId || 'cat-coffee',
@@ -613,15 +604,14 @@ export async function addInventoryItem(itemData, userId = DEFAULT_USER_ID) {
     supplier: itemData.supplier ? itemData.supplier.trim() : 'Local Supplier',
     notes: itemData.notes ? itemData.notes.trim() : '',
     vendorMappings: Array.isArray(itemData.vendorMappings) ? itemData.vendorMappings : [],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   };
-
-  const newId = 'item-' + Date.now() + '-' + Math.random().toString(36).substring(2, 5);
 
   if (isFirebaseConfigured() && db) {
     try {
       await setDoc(doc(db, 'inventory_items', newId), {
         ...cleanData,
-        id: newId,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
@@ -633,12 +623,9 @@ export async function addInventoryItem(itemData, userId = DEFAULT_USER_ID) {
   const itemsKey = getLocalItemsKey(uid);
   const items = getLocalData(itemsKey, []);
   const newItem = {
-    id: newId,
     ...cleanData,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
   };
-  const updated = [newItem, ...items.filter((i) => i.id !== newId)];
+  const updated = deduplicateByNewest([newItem, ...items.filter((i) => i.id !== newId)]);
   setLocalData(itemsKey, updated);
   bus.emit(`inventory_${uid}`, updated);
   bus.emit('all_items_updated', updated);
@@ -652,7 +639,7 @@ export async function addInventoryItem(itemData, userId = DEFAULT_USER_ID) {
  */
 export async function updateInventoryItem(id, updatedData, userId = DEFAULT_USER_ID) {
   const uid = userId || DEFAULT_USER_ID;
-  const cleanData = { ...updatedData, userId: uid };
+  const cleanData = { ...updatedData, userId: uid, id, updatedAt: new Date().toISOString() };
   if (cleanData.quantity !== undefined) cleanData.quantity = Math.max(0, Number(cleanData.quantity));
   if (cleanData.unitPrice !== undefined) cleanData.unitPrice = Math.max(0, Number(cleanData.unitPrice));
   if (cleanData.reorderLevel !== undefined) cleanData.reorderLevel = Math.max(0, Number(cleanData.reorderLevel));
@@ -663,11 +650,9 @@ export async function updateInventoryItem(id, updatedData, userId = DEFAULT_USER
   if (isFirebaseConfigured() && db) {
     try {
       const docRef = doc(db, 'inventory_items', id);
-      await setDoc(docRef, { ...cleanData, id, updatedAt: serverTimestamp() }, { merge: true });
+      await setDoc(docRef, { ...cleanData, updatedAt: serverTimestamp() }, { merge: true });
       if (!id.startsWith(uid + '_')) {
-        try {
-          await setDoc(doc(db, 'inventory_items', `${uid}_${id}`), { ...cleanData, id, updatedAt: serverTimestamp() }, { merge: true });
-        } catch (e) {}
+        deleteDoc(doc(db, 'inventory_items', `${uid}_${id}`)).catch(() => {});
       }
     } catch (e) {
       console.warn('Firestore update notice:', e);
@@ -678,12 +663,13 @@ export async function updateInventoryItem(id, updatedData, userId = DEFAULT_USER
   const items = getLocalData(itemsKey, []);
   const updated = items.map((item) =>
     item.id === id || item.id === `${uid}_${id}`
-      ? { ...item, ...cleanData, updatedAt: new Date().toISOString() }
+      ? { ...item, ...cleanData }
       : item
   );
-  setLocalData(itemsKey, updated);
-  bus.emit(`inventory_${uid}`, updated);
-  bus.emit('all_items_updated', updated);
+  const deduped = deduplicateByNewest(updated);
+  setLocalData(itemsKey, deduped);
+  bus.emit(`inventory_${uid}`, deduped);
+  bus.emit('all_items_updated', deduped);
 
   logActivity(uid, 'UPDATED', id, cleanData.name || 'Item', `Updated item details and vendor mappings`, 'Café Manager');
 }
@@ -699,9 +685,7 @@ export async function deleteInventoryItem(id, userId = DEFAULT_USER_ID, itemName
     try {
       await deleteDoc(doc(db, 'inventory_items', id));
       if (!id.startsWith(uid + '_')) {
-        try {
-          await deleteDoc(doc(db, 'inventory_items', `${uid}_${id}`));
-        } catch (e) {}
+        deleteDoc(doc(db, 'inventory_items', `${uid}_${id}`)).catch(() => {});
       }
     } catch (e) {
       console.warn('Firestore delete item notice:', e);
@@ -744,9 +728,10 @@ export async function quickAdjustQuantity(id, delta, userId = DEFAULT_USER_ID, i
     return item;
   });
 
-  setLocalData(itemsKey, updated);
-  bus.emit(`inventory_${uid}`, updated);
-  bus.emit('all_items_updated', updated);
+  const deduped = deduplicateByNewest(updated);
+  setLocalData(itemsKey, deduped);
+  bus.emit(`inventory_${uid}`, deduped);
+  bus.emit('all_items_updated', deduped);
 
   // Commit to Firestore
   if (isFirebaseConfigured() && db) {
@@ -759,9 +744,7 @@ export async function quickAdjustQuantity(id, delta, userId = DEFAULT_USER_ID, i
 
       await setDoc(doc(db, 'inventory_items', id), payload, { merge: true });
       if (!id.startsWith(uid + '_')) {
-        try {
-          await setDoc(doc(db, 'inventory_items', `${uid}_${id}`), payload, { merge: true });
-        } catch (e) {}
+        deleteDoc(doc(db, 'inventory_items', `${uid}_${id}`)).catch(() => {});
       }
     } catch (e) {
       console.warn('Firestore quantity adjustment notice:', e);
@@ -835,18 +818,25 @@ export async function addVendorPriceMapping(itemId, vendorMappingData, userId = 
     return item;
   });
 
-  setLocalData(itemsKey, updatedInventory);
-  bus.emit(`inventory_${uid}`, updatedInventory);
+  const deduped = deduplicateByNewest(updatedInventory);
+  setLocalData(itemsKey, deduped);
+  bus.emit(`inventory_${uid}`, deduped);
+  bus.emit('all_items_updated', deduped);
 
   if (isFirebaseConfigured() && db && targetItem) {
     try {
-      setDoc(doc(db, 'inventory_items', targetItem.id), {
+      await setDoc(doc(db, 'inventory_items', targetItem.id), {
         supplier: targetItem.supplier,
         unitPrice: targetItem.unitPrice,
         vendorMappings: targetItem.vendorMappings,
         updatedAt: serverTimestamp(),
-      }, { merge: true }).catch(() => {});
-    } catch (e) {}
+      }, { merge: true });
+      if (!targetItem.id.startsWith(uid + '_')) {
+        deleteDoc(doc(db, 'inventory_items', `${uid}_${targetItem.id}`)).catch(() => {});
+      }
+    } catch (e) {
+      console.warn('Firestore vendor mapping notice:', e);
+    }
   }
 
   logActivity(
@@ -884,15 +874,20 @@ export async function removeVendorPriceMapping(itemId, mappingId, userId = DEFAU
     return item;
   });
 
-  setLocalData(itemsKey, updatedInventory);
-  bus.emit(`inventory_${uid}`, updatedInventory);
+  const deduped = deduplicateByNewest(updatedInventory);
+  setLocalData(itemsKey, deduped);
+  bus.emit(`inventory_${uid}`, deduped);
+  bus.emit('all_items_updated', deduped);
 
   if (isFirebaseConfigured() && db && targetItem) {
     try {
-      setDoc(doc(db, 'inventory_items', targetItem.id), {
+      await setDoc(doc(db, 'inventory_items', targetItem.id), {
         vendorMappings: targetItem.vendorMappings,
         updatedAt: serverTimestamp(),
-      }, { merge: true }).catch(() => {});
+      }, { merge: true });
+      if (!targetItem.id.startsWith(uid + '_')) {
+        deleteDoc(doc(db, 'inventory_items', `${uid}_${targetItem.id}`)).catch(() => {});
+      }
     } catch (e) {}
   }
 
@@ -974,11 +969,30 @@ export async function receivePurchaseOrder(poId, deliveryData, userId = DEFAULT_
   const uid = userId || DEFAULT_USER_ID;
   const posKey = getLocalPosKey(uid);
   const pos = getLocalData(posKey, []);
-  const targetPo = pos.find((p) => p.id === poId);
+  let targetPo = pos.find((p) => p.id === poId);
+
+  // If not found in local cache, fetch directly from Firestore
+  if (!targetPo && isFirebaseConfigured() && db) {
+    try {
+      const poSnap = await getDoc(doc(db, 'purchase_orders', poId));
+      if (poSnap.exists()) {
+        targetPo = { id: poSnap.id, ...poSnap.data() };
+      }
+    } catch (e) {}
+  }
+
   if (!targetPo) throw new Error('Purchase Order not found');
 
   const itemsKey = getLocalItemsKey(uid);
-  const currentInventory = getLocalData(itemsKey, []);
+  let currentInventory = getLocalData(itemsKey, []);
+  if ((!currentInventory || currentInventory.length === 0) && isFirebaseConfigured() && db) {
+    try {
+      const invSnap = await getDocs(query(collection(db, 'inventory_items'), where('userId', '==', uid)));
+      if (!invSnap.empty) {
+        currentInventory = invSnap.docs.map((d) => ({ ...d.data(), id: d.id }));
+      }
+    } catch (e) {}
+  }
 
   let actualTotalCost = 0;
   let isPartial = false;
@@ -1040,6 +1054,9 @@ export async function receivePurchaseOrder(poId, deliveryData, userId = DEFAULT_
             },
             { merge: true }
           ).catch(() => {});
+          if (!invItem.id.startsWith(uid + '_')) {
+            deleteDoc(doc(db, 'inventory_items', `${uid}_${invItem.id}`)).catch(() => {});
+          }
         } catch (e) {}
       }
 
@@ -1077,8 +1094,10 @@ export async function receivePurchaseOrder(poId, deliveryData, userId = DEFAULT_
     return invItem;
   });
 
-  setLocalData(itemsKey, updatedInventory);
-  bus.emit(`inventory_${uid}`, updatedInventory);
+  const dedupedInventory = deduplicateByNewest(updatedInventory);
+  setLocalData(itemsKey, dedupedInventory);
+  bus.emit(`inventory_${uid}`, dedupedInventory);
+  bus.emit('all_items_updated', dedupedInventory);
 
   // 2. Update Purchase Order Status & Financials
   const updatedPo = {
@@ -1088,6 +1107,7 @@ export async function receivePurchaseOrder(poId, deliveryData, userId = DEFAULT_
     totalCost: actualTotalCost,
     receivedAt: new Date().toISOString(),
     receivedBy: userName,
+    updatedAt: new Date().toISOString(),
   };
 
   if (isFirebaseConfigured() && db) {
@@ -1095,11 +1115,12 @@ export async function receivePurchaseOrder(poId, deliveryData, userId = DEFAULT_
       await setDoc(doc(db, 'purchase_orders', poId), {
         ...updatedPo,
         receivedAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
       }, { merge: true });
     } catch (e) {}
   }
 
-  const updatedPos = pos.map((p) => (p.id === poId ? updatedPo : p));
+  const updatedPos = deduplicateByNewest([updatedPo, ...pos.filter((p) => p.id !== poId)]);
   setLocalData(posKey, updatedPos);
   bus.emit(`pos_${uid}`, updatedPos);
 
@@ -1129,10 +1150,10 @@ export function subscribeToVendors(userId = DEFAULT_USER_ID, callback) {
   const vendorsKey = getLocalVendorsKey(uid);
 
   let initialVendors = getLocalData(vendorsKey, INITIAL_VENDORS);
-  callback(initialVendors);
+  callback(deduplicateByNewest(initialVendors));
 
   const unsubscribeBus = bus.on(`vendors_${uid}`, (updatedVendors) => {
-    callback(updatedVendors);
+    callback(deduplicateByNewest(updatedVendors));
   });
 
   let handleStorage = null;
@@ -1140,7 +1161,7 @@ export function subscribeToVendors(userId = DEFAULT_USER_ID, callback) {
     handleStorage = (e) => {
       if (e.key === vendorsKey && e.newValue) {
         try {
-          callback(JSON.parse(e.newValue));
+          callback(deduplicateByNewest(JSON.parse(e.newValue)));
         } catch (err) {}
       }
     };
@@ -1163,20 +1184,22 @@ export function subscribeToVendors(userId = DEFAULT_USER_ID, callback) {
                 docId: doc.id,
               };
             });
-            setLocalData(vendorsKey, firestoreVendors);
-            callback(firestoreVendors);
-            bus.emit(`vendors_${uid}`, firestoreVendors);
+            const uniqueVendors = deduplicateByNewest(firestoreVendors);
+            setLocalData(vendorsKey, uniqueVendors);
+            callback(uniqueVendors);
+            bus.emit(`vendors_${uid}`, uniqueVendors);
+            bus.emit('all_vendors_updated', uniqueVendors);
           } else {
             const local = getLocalData(vendorsKey, INITIAL_VENDORS);
             const valid = local && local.length > 0 ? local : INITIAL_VENDORS;
             setLocalData(vendorsKey, valid);
-            callback(valid);
+            callback(deduplicateByNewest(valid));
 
             valid.forEach((v) => {
               const vId = v.id || `ven-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`;
               setDoc(
-                doc(db, 'vendors', `${uid}_${vId}`),
-                { ...v, id: vId, originalId: vId, userId: uid, createdAt: serverTimestamp() },
+                doc(db, 'vendors', vId),
+                { ...v, id: vId, originalId: vId, userId: uid, createdAt: serverTimestamp(), updatedAt: serverTimestamp() },
                 { merge: true }
               ).catch(() => {});
             });
@@ -1184,6 +1207,8 @@ export function subscribeToVendors(userId = DEFAULT_USER_ID, callback) {
         },
         (err) => {
           console.warn('Firestore vendors offline notice:', err.message);
+          const local = getLocalData(vendorsKey, INITIAL_VENDORS);
+          callback(deduplicateByNewest(local));
         }
       );
     } catch (e) {
@@ -1208,8 +1233,9 @@ export async function addVendor(vendorData, userId = DEFAULT_USER_ID, userName =
   const vendorsKey = getLocalVendorsKey(uid);
   const currentVendors = getLocalData(vendorsKey, []);
 
+  const newId = vendorData.id || `ven_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
   const newVendor = {
-    id: `ven_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+    id: newId,
     name: (vendorData.name || '').trim(),
     contactPerson: vendorData.contactPerson ? vendorData.contactPerson.trim() : '',
     email: vendorData.email ? vendorData.email.trim() : '',
@@ -1222,20 +1248,22 @@ export async function addVendor(vendorData, userId = DEFAULT_USER_ID, userName =
     notes: vendorData.notes ? vendorData.notes.trim() : '',
     userId: uid,
     createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   };
 
   if (isFirebaseConfigured() && db) {
     try {
-      await setDoc(doc(db, 'vendors', newVendor.id), {
+      await setDoc(doc(db, 'vendors', newId), {
         ...newVendor,
         createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
       });
     } catch (e) {
       console.warn('Notice saving vendor:', e.message);
     }
   }
 
-  const updatedVendors = [newVendor, ...currentVendors.filter((v) => v.id !== newVendor.id)];
+  const updatedVendors = deduplicateByNewest([newVendor, ...currentVendors.filter((v) => v.id !== newId)]);
   setLocalData(vendorsKey, updatedVendors);
   bus.emit(`vendors_${uid}`, updatedVendors);
   bus.emit('all_vendors_updated', updatedVendors);
@@ -1274,7 +1302,7 @@ export function subscribeToAllVendors(callback) {
         }
       }
     }
-    return allLocal;
+    return deduplicateByNewest(allLocal);
   };
 
   callback(getVendorsFromLocal());
@@ -1294,7 +1322,7 @@ export function subscribeToAllVendors(callback) {
                 merged.push(v);
               }
             }
-            callback(merged);
+            callback(deduplicateByNewest(merged));
           }
         },
         (e) => {}
@@ -1352,6 +1380,7 @@ export async function updatePurchaseOrderDispatch(
     trackingNumber: dispatchDetails.trackingNumber || `TRK-${Date.now().toString().slice(-6)}`,
     carrierName: dispatchDetails.carrierName || 'Direct Delivery Fleet',
     dispatchNotes: dispatchDetails.notes || 'Order packed and dispatched from vendor warehouse.',
+    updatedAt: new Date().toISOString(),
   };
 
   if (isFirebaseConfigured() && db) {
@@ -1360,6 +1389,7 @@ export async function updatePurchaseOrderDispatch(
         status: 'PENDING_DELIVERY',
         dispatchStatus: 'DISPATCHED',
         dispatchedAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
         trackingNumber: updatedPo.trackingNumber,
         carrierName: updatedPo.carrierName,
         dispatchNotes: updatedPo.dispatchNotes,
@@ -1375,8 +1405,9 @@ export async function updatePurchaseOrderDispatch(
     if (!pos.some((p) => p.id === poId || p.poNumber === poId)) {
       updatedList.unshift(updatedPo);
     }
-    setLocalData(posKey, updatedList);
-    bus.emit(`pos_${uid}`, updatedList);
+    const dedupedList = deduplicateByNewest(updatedList);
+    setLocalData(posKey, dedupedList);
+    bus.emit(`pos_${uid}`, dedupedList);
     bus.emit('all_pos_updated', updatedPo);
   }
 
@@ -1397,23 +1428,17 @@ export async function updatePurchaseOrderDispatch(
  */
 export async function updateVendor(id, updatedData, userId = DEFAULT_USER_ID) {
   const uid = userId || DEFAULT_USER_ID;
-  const cleanData = { ...updatedData, userId: uid };
+  const cleanData = { ...updatedData, id, userId: uid, updatedAt: new Date().toISOString() };
 
   if (isFirebaseConfigured() && db) {
     try {
-      const docId = id.startsWith(uid + '_') ? id : `${uid}_${id}`;
-      await setDoc(doc(db, 'vendors', docId), {
+      await setDoc(doc(db, 'vendors', id), {
         ...cleanData,
-        id,
         updatedAt: serverTimestamp(),
       }, { merge: true });
-      try {
-        await setDoc(doc(db, 'vendors', id), {
-          ...cleanData,
-          id,
-          updatedAt: serverTimestamp(),
-        }, { merge: true });
-      } catch (e) {}
+      if (!id.startsWith(uid + '_')) {
+        deleteDoc(doc(db, 'vendors', `${uid}_${id}`)).catch(() => {});
+      }
     } catch (e) {
       console.warn('Notice updating vendor:', e.message);
     }
@@ -1422,11 +1447,12 @@ export async function updateVendor(id, updatedData, userId = DEFAULT_USER_ID) {
   const vendorsKey = getLocalVendorsKey(uid);
   const currentVendors = getLocalData(vendorsKey, []);
   const updatedVendors = currentVendors.map((v) =>
-    v.id === id || v.id === `${uid}_${id}` ? { ...v, ...cleanData, updatedAt: new Date().toISOString() } : v
+    v.id === id || v.id === `${uid}_${id}` ? { ...v, ...cleanData } : v
   );
-  setLocalData(vendorsKey, updatedVendors);
-  bus.emit(`vendors_${uid}`, updatedVendors);
-  bus.emit('all_vendors_updated', updatedVendors);
+  const deduped = deduplicateByNewest(updatedVendors);
+  setLocalData(vendorsKey, deduped);
+  bus.emit(`vendors_${uid}`, deduped);
+  bus.emit('all_vendors_updated', deduped);
 }
 
 /**
@@ -1437,11 +1463,10 @@ export async function deleteVendor(id, userId = DEFAULT_USER_ID) {
 
   if (isFirebaseConfigured() && db) {
     try {
-      const docId = id.startsWith(uid + '_') ? id : `${uid}_${id}`;
-      await deleteDoc(doc(db, 'vendors', docId));
-      try {
-        await deleteDoc(doc(db, 'vendors', id));
-      } catch (e) {}
+      await deleteDoc(doc(db, 'vendors', id));
+      if (!id.startsWith(uid + '_')) {
+        deleteDoc(doc(db, 'vendors', `${uid}_${id}`)).catch(() => {});
+      }
     } catch (e) {
       console.warn('Notice deleting vendor:', e.message);
     }
@@ -1460,22 +1485,24 @@ export async function deleteVendor(id, userId = DEFAULT_USER_ID) {
  */
 export async function addCategory(categoryData, userId = DEFAULT_USER_ID) {
   const uid = userId || DEFAULT_USER_ID;
+  const newId = categoryData.id || ('cat-' + Date.now() + '-' + Math.random().toString(36).substring(2, 5));
   const clean = {
+    id: newId,
     userId: uid,
     name: categoryData.name.trim(),
     slug: categoryData.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
     icon: categoryData.icon || 'Coffee',
     description: categoryData.description ? categoryData.description.trim() : '',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   };
-
-  const newId = 'cat-' + Date.now() + '-' + Math.random().toString(36).substring(2, 5);
 
   if (isFirebaseConfigured() && db) {
     try {
       await setDoc(doc(db, 'categories', newId), {
         ...clean,
-        id: newId,
         createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
       });
     } catch (e) {
       console.warn('Notice adding category:', e.message);
@@ -1484,43 +1511,33 @@ export async function addCategory(categoryData, userId = DEFAULT_USER_ID) {
 
   const catsKey = getLocalCategoriesKey(uid);
   const categories = getLocalData(catsKey, INITIAL_CATEGORIES);
-  const newCat = {
-    id: newId,
-    ...clean,
-    createdAt: new Date().toISOString(),
-  };
-  const updatedCats = [newCat, ...categories.filter((c) => c.id !== newId)];
+  const updatedCats = deduplicateByNewest([clean, ...categories.filter((c) => c.id !== newId)]);
   setLocalData(catsKey, updatedCats);
   bus.emit(`categories_${uid}`, updatedCats);
 
   logActivity(uid, 'CATEGORY_CREATED', newId, clean.name, `Created category taxonomy "${clean.name}"`, 'Café Admin');
-  return newCat;
+  return clean;
 }
 
 export async function updateCategory(id, updatedData, userId = DEFAULT_USER_ID) {
   const uid = userId || DEFAULT_USER_ID;
   const clean = {
     ...updatedData,
+    id,
+    userId: uid,
     slug: updatedData.name ? updatedData.name.toLowerCase().replace(/[^a-z0-9]+/g, '-') : undefined,
+    updatedAt: new Date().toISOString(),
   };
 
   if (isFirebaseConfigured() && db) {
     try {
-      const docId = id.startsWith(uid + '_') ? id : `${uid}_${id}`;
-      await setDoc(doc(db, 'categories', docId), {
+      await setDoc(doc(db, 'categories', id), {
         ...clean,
-        id,
-        userId: uid,
         updatedAt: serverTimestamp(),
       }, { merge: true });
-      try {
-        await setDoc(doc(db, 'categories', id), {
-          ...clean,
-          id,
-          userId: uid,
-          updatedAt: serverTimestamp(),
-        }, { merge: true });
-      } catch (e) {}
+      if (!id.startsWith(uid + '_')) {
+        deleteDoc(doc(db, 'categories', `${uid}_${id}`)).catch(() => {});
+      }
     } catch (e) {
       console.warn('Notice updating category:', e.message);
     }
@@ -1528,9 +1545,10 @@ export async function updateCategory(id, updatedData, userId = DEFAULT_USER_ID) 
 
   const catsKey = getLocalCategoriesKey(uid);
   const categories = getLocalData(catsKey, INITIAL_CATEGORIES);
-  const updatedCats = categories.map((c) => (c.id === id || c.id === `${uid}_${id}` ? { ...c, ...clean, updatedAt: new Date().toISOString() } : c));
-  setLocalData(catsKey, updatedCats);
-  bus.emit(`categories_${uid}`, updatedCats);
+  const updatedCats = categories.map((c) => (c.id === id || c.id === `${uid}_${id}` ? { ...c, ...clean } : c));
+  const deduped = deduplicateByNewest(updatedCats);
+  setLocalData(catsKey, deduped);
+  bus.emit(`categories_${uid}`, deduped);
 }
 
 export async function deleteCategory(id, userId = DEFAULT_USER_ID) {
@@ -1538,11 +1556,10 @@ export async function deleteCategory(id, userId = DEFAULT_USER_ID) {
 
   if (isFirebaseConfigured() && db) {
     try {
-      const docId = id.startsWith(uid + '_') ? id : `${uid}_${id}`;
-      await deleteDoc(doc(db, 'categories', docId));
-      try {
-        await deleteDoc(doc(db, 'categories', id));
-      } catch (e) {}
+      await deleteDoc(doc(db, 'categories', id));
+      if (!id.startsWith(uid + '_')) {
+        deleteDoc(doc(db, 'categories', `${uid}_${id}`)).catch(() => {});
+      }
     } catch (e) {
       console.warn('Notice deleting category:', e.message);
     }
@@ -2119,10 +2136,10 @@ export function subscribeToStaffMembers(userId = DEFAULT_USER_ID, callback) {
   const staffKey = getLocalStaffKey(uid);
 
   let initialStaff = getLocalData(staffKey, INITIAL_STAFF_MEMBERS);
-  callback(initialStaff);
+  callback(deduplicateByNewest(initialStaff));
 
   const unsubscribeBus = bus.on(`staff_${uid}`, (updatedStaff) => {
-    callback(updatedStaff);
+    callback(deduplicateByNewest(updatedStaff));
   });
 
   let unsubscribeFirestore = () => {};
@@ -2141,20 +2158,21 @@ export function subscribeToStaffMembers(userId = DEFAULT_USER_ID, callback) {
                 docId: doc.id,
               };
             });
-            setLocalData(staffKey, firestoreStaff);
-            callback(firestoreStaff);
-            bus.emit(`staff_${uid}`, firestoreStaff);
+            const uniqueStaff = deduplicateByNewest(firestoreStaff);
+            setLocalData(staffKey, uniqueStaff);
+            callback(uniqueStaff);
+            bus.emit(`staff_${uid}`, uniqueStaff);
           } else {
             const local = getLocalData(staffKey, INITIAL_STAFF_MEMBERS);
             const valid = local && local.length > 0 ? local : INITIAL_STAFF_MEMBERS;
             setLocalData(staffKey, valid);
-            callback(valid);
+            callback(deduplicateByNewest(valid));
 
             valid.forEach((s) => {
               const sId = s.id || `staff-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`;
               setDoc(
-                doc(db, 'staff_members', `${uid}_${sId}`),
-                { ...s, id: sId, originalId: sId, userId: uid, createdAt: serverTimestamp() },
+                doc(db, 'staff_members', sId),
+                { ...s, id: sId, originalId: sId, userId: uid, createdAt: serverTimestamp(), updatedAt: serverTimestamp() },
                 { merge: true }
               ).catch(() => {});
             });
@@ -2162,6 +2180,8 @@ export function subscribeToStaffMembers(userId = DEFAULT_USER_ID, callback) {
         },
         (err) => {
           console.warn('Firestore staff members offline fallback:', err.message);
+          const local = getLocalData(staffKey, INITIAL_STAFF_MEMBERS);
+          callback(deduplicateByNewest(local));
         }
       );
     } catch (e) {
@@ -2183,8 +2203,9 @@ export async function addStaffMember(staffData, userId = DEFAULT_USER_ID, userNa
   const staffKey = getLocalStaffKey(uid);
   const currentStaff = getLocalData(staffKey, []);
 
+  const newId = staffData.id || ('staff-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6));
   const newStaff = {
-    id: 'staff-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
+    id: newId,
     userId: uid,
     name: staffData.name.trim(),
     email: staffData.email.trim().toLowerCase(),
@@ -2197,20 +2218,22 @@ export async function addStaffMember(staffData, userId = DEFAULT_USER_ID, userNa
     pin: staffData.pin || '1234',
     joinedDate: staffData.joinedDate || new Date().toISOString().split('T')[0],
     createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   };
 
   if (isFirebaseConfigured() && db) {
     try {
-      await setDoc(doc(db, 'staff_members', newStaff.id), {
+      await setDoc(doc(db, 'staff_members', newId), {
         ...newStaff,
         createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
       });
     } catch (e) {
       console.warn('Notice saving staff member:', e.message);
     }
   }
 
-  const updatedStaff = [newStaff, ...currentStaff.filter((s) => s.id !== newStaff.id)];
+  const updatedStaff = deduplicateByNewest([newStaff, ...currentStaff.filter((s) => s.id !== newId)]);
   setLocalData(staffKey, updatedStaff);
   bus.emit(`staff_${uid}`, updatedStaff);
 
@@ -2233,32 +2256,33 @@ export async function updateStaffMember(id, staffData, userId = DEFAULT_USER_ID,
   const uid = userId || DEFAULT_USER_ID;
   const staffKey = getLocalStaffKey(uid);
   const currentStaff = getLocalData(staffKey, []);
+  const cleanData = {
+    ...staffData,
+    id,
+    userId: uid,
+    updatedAt: new Date().toISOString(),
+  };
 
   if (isFirebaseConfigured() && db) {
     try {
-      const docId = id.startsWith(uid + '_') ? id : `${uid}_${id}`;
-      await setDoc(doc(db, 'staff_members', docId), {
-        ...staffData,
-        id,
+      await setDoc(doc(db, 'staff_members', id), {
+        ...cleanData,
         updatedAt: serverTimestamp(),
       }, { merge: true });
-      try {
-        await setDoc(doc(db, 'staff_members', id), {
-          ...staffData,
-          id,
-          updatedAt: serverTimestamp(),
-        }, { merge: true });
-      } catch (e) {}
+      if (!id.startsWith(uid + '_')) {
+        deleteDoc(doc(db, 'staff_members', `${uid}_${id}`)).catch(() => {});
+      }
     } catch (e) {
       console.warn('Notice updating staff member:', e.message);
     }
   }
 
   const updatedStaff = currentStaff.map((s) =>
-    s.id === id || s.id === `${uid}_${id}` ? { ...s, ...staffData, updatedAt: new Date().toISOString() } : s
+    s.id === id || s.id === `${uid}_${id}` ? { ...s, ...cleanData } : s
   );
-  setLocalData(staffKey, updatedStaff);
-  bus.emit(`staff_${uid}`, updatedStaff);
+  const deduped = deduplicateByNewest(updatedStaff);
+  setLocalData(staffKey, deduped);
+  bus.emit(`staff_${uid}`, deduped);
 
   logActivity(
     uid,
@@ -2281,11 +2305,10 @@ export async function deleteStaffMember(id, userId = DEFAULT_USER_ID, userName =
 
   if (isFirebaseConfigured() && db) {
     try {
-      const docId = id.startsWith(uid + '_') ? id : `${uid}_${id}`;
-      await deleteDoc(doc(db, 'staff_members', docId));
-      try {
-        await deleteDoc(doc(db, 'staff_members', id));
-      } catch (e) {}
+      await deleteDoc(doc(db, 'staff_members', id));
+      if (!id.startsWith(uid + '_')) {
+        deleteDoc(doc(db, 'staff_members', `${uid}_${id}`)).catch(() => {});
+      }
       if (target?.email) {
         const q = query(
           collection(db, 'staff_members'),
@@ -2303,8 +2326,9 @@ export async function deleteStaffMember(id, userId = DEFAULT_USER_ID, userName =
   }
 
   const updatedStaff = currentStaff.filter((s) => s.id !== id && s.id !== `${uid}_${id}`);
-  setLocalData(staffKey, updatedStaff);
-  bus.emit(`staff_${uid}`, updatedStaff);
+  const deduped = deduplicateByNewest(updatedStaff);
+  setLocalData(staffKey, deduped);
+  bus.emit(`staff_${uid}`, deduped);
 
   logActivity(
     uid,
@@ -2327,23 +2351,20 @@ export async function toggleStaffStatus(id, newStatus, userId = DEFAULT_USER_ID,
 
   if (isFirebaseConfigured() && db) {
     try {
-      const docId = id.startsWith(uid + '_') ? id : `${uid}_${id}`;
-      await setDoc(doc(db, 'staff_members', docId), {
+      await setDoc(doc(db, 'staff_members', id), {
         status: newStatus,
         updatedAt: serverTimestamp(),
       }, { merge: true });
-      try {
-        await setDoc(doc(db, 'staff_members', id), {
-          status: newStatus,
-          updatedAt: serverTimestamp(),
-        }, { merge: true });
-      } catch (e) {}
+      if (!id.startsWith(uid + '_')) {
+        deleteDoc(doc(db, 'staff_members', `${uid}_${id}`)).catch(() => {});
+      }
     } catch (e) {}
   }
 
   const updatedStaff = currentStaff.map((s) => (s.id === id || s.id === `${uid}_${id}` ? { ...s, status: newStatus } : s));
-  setLocalData(staffKey, updatedStaff);
-  bus.emit(`staff_${uid}`, updatedStaff);
+  const deduped = deduplicateByNewest(updatedStaff);
+  setLocalData(staffKey, deduped);
+  bus.emit(`staff_${uid}`, deduped);
 
   logActivity(
     uid,
@@ -2364,16 +2385,17 @@ export async function seedSampleData(userId = DEFAULT_USER_ID) {
   if (isFirebaseConfigured() && db) {
     try {
       for (const cat of INITIAL_CATEGORIES) {
-        const catDocId = `${uid}_${cat.id}`;
+        const catDocId = cat.id;
         await setDoc(doc(db, 'categories', catDocId), {
           ...cat,
           id: catDocId,
           userId: uid,
           createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
         });
       }
       for (const item of INITIAL_INVENTORY_ITEMS) {
-        const itemDocId = `${uid}_${item.id}`;
+        const itemDocId = item.id;
         await setDoc(doc(db, 'inventory_items', itemDocId), {
           ...item,
           id: itemDocId,
@@ -2383,30 +2405,33 @@ export async function seedSampleData(userId = DEFAULT_USER_ID) {
         });
       }
       for (const po of INITIAL_PURCHASE_ORDERS) {
-        const poDocId = `${uid}_${po.id}`;
+        const poDocId = po.id;
         await setDoc(doc(db, 'purchase_orders', poDocId), {
           ...po,
           id: poDocId,
           userId: uid,
           createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
         });
       }
       for (const v of INITIAL_VENDORS) {
-        const vDocId = `${uid}_${v.id}`;
+        const vDocId = v.id;
         await setDoc(doc(db, 'vendors', vDocId), {
           ...v,
           id: vDocId,
           userId: uid,
           createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
         });
       }
       for (const st of INITIAL_STAFF_MEMBERS) {
-        const stDocId = `${uid}_${st.id}`;
+        const stDocId = st.id;
         await setDoc(doc(db, 'staff_members', stDocId), {
           ...st,
           id: stDocId,
           userId: uid,
           createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
         });
       }
     } catch (e) {
@@ -2416,27 +2441,27 @@ export async function seedSampleData(userId = DEFAULT_USER_ID) {
 
   const itemsWithUser = INITIAL_INVENTORY_ITEMS.map((item) => ({
     ...item,
-    id: `${uid}_${item.id}`,
+    id: item.id,
     userId: uid,
   }));
   const catsWithUser = INITIAL_CATEGORIES.map((cat) => ({
     ...cat,
-    id: `${uid}_${cat.id}`,
+    id: cat.id,
     userId: uid,
   }));
   const posWithUser = INITIAL_PURCHASE_ORDERS.map((po) => ({
     ...po,
-    id: `${uid}_${po.id}`,
+    id: po.id,
     userId: uid,
   }));
   const staffWithUser = INITIAL_STAFF_MEMBERS.map((s) => ({
     ...s,
-    id: `${uid}_${s.id}`,
+    id: s.id,
     userId: uid,
   }));
   const vendorsWithUser = INITIAL_VENDORS.map((v) => ({
     ...v,
-    id: `${uid}_${v.id}`,
+    id: v.id,
     userId: uid,
   }));
 
