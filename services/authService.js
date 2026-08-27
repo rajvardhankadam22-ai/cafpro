@@ -22,7 +22,14 @@ import {
   serverTimestamp,
 } from 'firebase/firestore';
 import { auth, db, isFirebaseConfigured } from '@/lib/firebase';
-import { INITIAL_STAFF_MEMBERS, INITIAL_CATEGORIES } from './seedData';
+import {
+  INITIAL_STAFF_MEMBERS,
+  INITIAL_CATEGORIES,
+  INITIAL_INVENTORY_ITEMS,
+  INITIAL_PURCHASE_ORDERS,
+  INITIAL_VENDORS,
+  DEMO_ACCOUNT,
+} from './seedData';
 
 const LOCAL_AUTH_KEY = 'cafepulse_user_session';
 
@@ -197,11 +204,123 @@ export function subscribeToAuth(callback) {
 }
 
 /**
+ * 0. 1-Click Demo Account Login
+ */
+export async function loginAsDemo(roleType = 'admin') {
+  const targetStaff = INITIAL_STAFF_MEMBERS.find((s) => s.role === roleType) || INITIAL_STAFF_MEMBERS[0];
+  const isAdminUser = targetStaff.role === 'admin';
+  const storeUid = targetStaff.userId || 'demo_cafepulse_admin';
+
+  const demoUser = {
+    uid: storeUid,
+    staffId: targetStaff.id,
+    storeUid: storeUid,
+    email: targetStaff.email,
+    displayName: targetStaff.name,
+    role: targetStaff.role || (isAdminUser ? 'admin' : 'barista'),
+    roleLabel: targetStaff.roleLabel || (isAdminUser ? 'Store Admin & General Manager' : 'Shift Barista (Floor POS)'),
+    isStaff: !isAdminUser,
+    isRoleLocked: !isAdminUser,
+    branchName: targetStaff.branch || 'Indiranagar Flagship Branch',
+    shift: targetStaff.shift || 'General Operations',
+    cafeName: 'CaféPulse Flagship Roastery',
+    photoURL: null,
+    pin: targetStaff.pin,
+  };
+
+  // Seed demo data locally if empty
+  if (typeof window !== 'undefined') {
+    const itemKey = `cafepulse_items_${storeUid}`;
+    if (!localStorage.getItem(itemKey) || JSON.parse(localStorage.getItem(itemKey) || '[]').length === 0) {
+      localStorage.setItem(itemKey, JSON.stringify(INITIAL_INVENTORY_ITEMS));
+    }
+    const catKey = `cafepulse_cats_${storeUid}`;
+    if (!localStorage.getItem(catKey) || JSON.parse(localStorage.getItem(catKey) || '[]').length === 0) {
+      localStorage.setItem(catKey, JSON.stringify(INITIAL_CATEGORIES));
+    }
+    const poKey = `cafepulse_pos_${storeUid}`;
+    if (!localStorage.getItem(poKey) || JSON.parse(localStorage.getItem(poKey) || '[]').length === 0) {
+      localStorage.setItem(poKey, JSON.stringify(INITIAL_PURCHASE_ORDERS));
+    }
+    const venKey = `cafepulse_vendors_${storeUid}`;
+    if (!localStorage.getItem(venKey) || JSON.parse(localStorage.getItem(venKey) || '[]').length === 0) {
+      localStorage.setItem(venKey, JSON.stringify(INITIAL_VENDORS));
+    }
+    const staffKey = `cafepulse_staff_${storeUid}`;
+    if (!localStorage.getItem(staffKey) || JSON.parse(localStorage.getItem(staffKey) || '[]').length === 0) {
+      localStorage.setItem(staffKey, JSON.stringify(INITIAL_STAFF_MEMBERS));
+    }
+  }
+
+  // Pre-seed demo data in Firestore if configured
+  if (isFirebaseConfigured() && db) {
+    try {
+      setDoc(doc(db, 'users', storeUid), {
+        uid: storeUid,
+        email: targetStaff.email,
+        displayName: targetStaff.name,
+        cafeName: 'CaféPulse Flagship Roastery',
+        branchName: 'Indiranagar Flagship Branch',
+        role: targetStaff.role,
+        roleLabel: targetStaff.roleLabel,
+        isStaff: !isAdminUser,
+        lastLogin: serverTimestamp(),
+      }, { merge: true }).catch(() => {});
+
+      INITIAL_INVENTORY_ITEMS.forEach((itm) => {
+        setDoc(doc(db, 'inventory_items', itm.id), {
+          ...itm,
+          userId: storeUid,
+          updatedAt: serverTimestamp(),
+        }, { merge: true }).catch(() => {});
+      });
+
+      INITIAL_CATEGORIES.forEach((cat) => {
+        setDoc(doc(db, 'categories', `${storeUid}_${cat.id}`), {
+          ...cat,
+          id: cat.id,
+          userId: storeUid,
+          createdAt: serverTimestamp(),
+        }, { merge: true }).catch(() => {});
+      });
+
+      INITIAL_VENDORS.forEach((v) => {
+        setDoc(doc(db, 'vendors', v.id), {
+          ...v,
+          userId: storeUid,
+          createdAt: serverTimestamp(),
+        }, { merge: true }).catch(() => {});
+      });
+
+      INITIAL_STAFF_MEMBERS.forEach((s) => {
+        setDoc(doc(db, 'staff_members', s.id), {
+          ...s,
+          userId: storeUid,
+          createdAt: serverTimestamp(),
+        }, { merge: true }).catch(() => {});
+      });
+    } catch (e) {}
+  }
+
+  registerCafeInDirectory(demoUser);
+  localStorage.setItem(LOCAL_AUTH_KEY, JSON.stringify(demoUser));
+  authBus.emit(demoUser);
+  return demoUser;
+}
+
+/**
  * 1. Sign In with Email & Password or Staff PIN
  */
 export async function loginWithEmail(email, password) {
   const cleanEmail = email.trim().toLowerCase();
   const cleanPass = (password || '').trim();
+
+  // Demo account instant pass
+  if (cleanEmail === 'demo@cafepulse.io' || cleanEmail === 'demo' || cleanEmail === 'manager@cafepulse.io') {
+    if (cleanPass === 'demo' || cleanPass === 'demo1234' || cleanPass === 'password123' || cleanPass === '1234' || !cleanPass) {
+      return loginAsDemo('admin');
+    }
+  }
 
   // A. Check if this login belongs to an invited Staff Member in Firestore / LocalStorage
   let foundStaff = null;
@@ -253,8 +372,8 @@ export async function loginWithEmail(email, password) {
       throw err;
     }
 
-    // Verify Password or PIN
-    const matchesPassword = Boolean(foundStaff.password && foundStaff.password === cleanPass);
+    // Verify Password or PIN (allow demo pass for demo accounts)
+    const matchesPassword = Boolean(foundStaff.password && (foundStaff.password === cleanPass || (foundStaff.email === 'demo@cafepulse.io' && (cleanPass === 'demo1234' || cleanPass === 'demo'))));
     const matchesPin = Boolean(foundStaff.pin && String(foundStaff.pin).trim() === cleanPass);
 
     if (!matchesPassword && !matchesPin) {

@@ -30,6 +30,7 @@ import {
   loginWithGoogle,
   loginWithPin,
   sendPasswordReset,
+  loginAsDemo,
 } from '@/services/authService';
 import { isFirebaseConfigured } from '@/lib/firebase';
 import { useToast } from '@/components/Toast';
@@ -177,6 +178,23 @@ function LoginContent() {
       const msg = formatAuthError(err);
       setErrorMessage(msg);
       toast.error(msg, 'PIN Login Error');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleDemoLogin = async (role = 'admin') => {
+    setErrorMessage('');
+    try {
+      setIsLoading(true);
+      const user = await loginAsDemo(role);
+      toast.success(`Welcome to CaféPulse! Signed in as ${user.displayName} (${user.roleLabel})`, 'Demo Account Active');
+      router.push('/dashboard');
+    } catch (err) {
+      console.error(err);
+      const msg = formatAuthError(err);
+      setErrorMessage(msg);
+      toast.error(msg, 'Demo Login Error');
     } finally {
       setIsLoading(false);
     }
@@ -454,6 +472,45 @@ function LoginContent() {
               </button>
             </div>
 
+            {/* 1-CLICK DEMO ACCOUNT QUICK ACCESS BANNER */}
+            <div className="p-3.5 rounded-2xl bg-gradient-to-br from-caramel-500/10 via-amber-500/10 to-orange-500/10 dark:from-caramel-900/20 dark:to-espresso-900/40 border border-caramel-300/70 dark:border-caramel-700/50 space-y-2.5 shadow-xs">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <span className="flex h-2 w-2 relative">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                  </span>
+                  <span className="text-[11px] font-extrabold uppercase tracking-wider text-caramel-900 dark:text-caramel-300">
+                    ⚡ 1-Click Demo Account
+                  </span>
+                </div>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-white/90 dark:bg-espresso-800 text-espresso-700 dark:text-cafe-300 border border-cafe-200 dark:border-espresso-700">
+                  demo@cafepulse.io
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleDemoLogin('admin')}
+                  disabled={isLoading}
+                  className="py-2 px-3 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-caramel-600 to-caramel-700 hover:from-caramel-500 hover:to-caramel-600 shadow-sm flex items-center justify-center gap-1.5 transition-all active:scale-[0.98] disabled:opacity-50"
+                >
+                  <Store className="w-3.5 h-3.5" />
+                  <span>👑 Demo Store Admin</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDemoLogin('head_barista')}
+                  disabled={isLoading}
+                  className="py-2 px-3 rounded-xl text-xs font-bold text-espresso-900 dark:text-cafe-100 bg-white dark:bg-espresso-800 border border-cafe-200 dark:border-espresso-700 hover:bg-cafe-50 dark:hover:bg-espresso-700 shadow-xs flex items-center justify-center gap-1.5 transition-all active:scale-[0.98] disabled:opacity-50"
+                >
+                  <Key className="w-3.5 h-3.5 text-caramel-600" />
+                  <span>☕ Floor Barista (PIN: 2024)</span>
+                </button>
+              </div>
+            </div>
+
             {/* Error Alert Box */}
             {errorMessage && (
               <motion.div
@@ -479,7 +536,7 @@ function LoginContent() {
                       type="email"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      placeholder="owner@yourcafe.com or staff email"
+                      placeholder="demo@cafepulse.io or owner@yourcafe.com"
                       required
                       className="w-full pl-10 pr-4 py-2.5 text-sm bg-cafe-50/70 dark:bg-espresso-900/50 border border-cafe-200 dark:border-espresso-700 rounded-xl text-espresso-950 dark:text-cafe-50 focus:ring-2 focus:ring-caramel-500/40 focus:border-caramel-500 outline-none"
                     />
@@ -507,7 +564,7 @@ function LoginContent() {
                       type="password"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      placeholder="Enter password or 4-digit PIN"
+                      placeholder="demo or enter password"
                       required
                       className="w-full pl-10 pr-4 py-2.5 text-sm bg-cafe-50/70 dark:bg-espresso-900/50 border border-cafe-200 dark:border-espresso-700 rounded-xl text-espresso-950 dark:text-cafe-50 focus:ring-2 focus:ring-caramel-500/40 focus:border-caramel-500 outline-none"
                     />
@@ -647,7 +704,46 @@ function LoginContent() {
                   </div>
                 </div>
 
-
+                {/* Quick Staff Demo PIN Badges */}
+                <div className="space-y-1.5">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-espresso-500 dark:text-cafe-400">
+                    Quick Demo PINs:
+                  </p>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => handleQuickPinLogin('1234', 'Aarav Sharma', 'Store Admin')}
+                      className="p-2 rounded-xl text-left bg-cafe-50 dark:bg-espresso-900/70 border border-cafe-200 dark:border-espresso-700 hover:border-caramel-500 transition-all text-xs font-medium"
+                    >
+                      <div className="font-bold text-espresso-900 dark:text-cafe-100">👑 Aarav (Admin)</div>
+                      <div className="text-[10px] text-espresso-500 dark:text-cafe-400 font-mono">PIN: 1234</div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleQuickPinLogin('2024', 'Priya Patel', 'Head Barista')}
+                      className="p-2 rounded-xl text-left bg-cafe-50 dark:bg-espresso-900/70 border border-cafe-200 dark:border-espresso-700 hover:border-caramel-500 transition-all text-xs font-medium"
+                    >
+                      <div className="font-bold text-espresso-900 dark:text-cafe-100">☕ Priya (Lead)</div>
+                      <div className="text-[10px] text-espresso-500 dark:text-cafe-400 font-mono">PIN: 2024</div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleQuickPinLogin('4321', 'Rohit Rao', 'Floor Barista')}
+                      className="p-2 rounded-xl text-left bg-cafe-50 dark:bg-espresso-900/70 border border-cafe-200 dark:border-espresso-700 hover:border-caramel-500 transition-all text-xs font-medium"
+                    >
+                      <div className="font-bold text-espresso-900 dark:text-cafe-100">📦 Rohit (Floor)</div>
+                      <div className="text-[10px] text-espresso-500 dark:text-cafe-400 font-mono">PIN: 4321</div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleQuickPinLogin('8888', 'Ananya Nair', 'Auditor')}
+                      className="p-2 rounded-xl text-left bg-cafe-50 dark:bg-espresso-900/70 border border-cafe-200 dark:border-espresso-700 hover:border-caramel-500 transition-all text-xs font-medium"
+                    >
+                      <div className="font-bold text-espresso-900 dark:text-cafe-100">📋 Ananya (Audit)</div>
+                      <div className="text-[10px] text-espresso-500 dark:text-cafe-400 font-mono">PIN: 8888</div>
+                    </button>
+                  </div>
+                </div>
 
                 <button
                   type="submit"
