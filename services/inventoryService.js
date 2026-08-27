@@ -219,28 +219,51 @@ export function subscribeToInventory(userId, callback) {
       unsubscribeFirestore = onSnapshot(
         q,
         (snapshot) => {
-          const rawItems = snapshot.docs.map((d) => ({
-            ...d.data(),
-            id: d.id,
-          }));
+          if (!snapshot.empty) {
+            const rawItems = snapshot.docs.map((d) => {
+              const data = d.data();
+              return {
+                ...data,
+                id: data.id || d.id,
+                docId: d.id,
+              };
+            });
 
-          // Deduplicate items cleanly by doc ID
-          const seen = new Set();
-          const uniqueItems = [];
-          for (const itm of rawItems) {
-            if (itm && itm.id && !seen.has(itm.id)) {
-              seen.add(itm.id);
-              uniqueItems.push(itm);
+            // Deduplicate items cleanly by doc ID
+            const seen = new Set();
+            const uniqueItems = [];
+            for (const itm of rawItems) {
+              if (itm && itm.id && !seen.has(itm.id)) {
+                seen.add(itm.id);
+                uniqueItems.push(itm);
+              }
+            }
+
+            setLocalData(localKey, uniqueItems);
+            callback(uniqueItems);
+            bus.emit(`inventory_${uid}`, uniqueItems);
+          } else {
+            const local = getLocalData(localKey, uid === 'demo_cafepulse_admin' ? INITIAL_INVENTORY_ITEMS : []);
+            if (local && local.length > 0) {
+              local.forEach((itm) => {
+                const itemId = itm.id || `item-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`;
+                setDoc(
+                  doc(db, 'inventory_items', itemId),
+                  { ...itm, id: itemId, userId: uid, createdAt: serverTimestamp(), updatedAt: serverTimestamp() },
+                  { merge: true }
+                ).catch(() => {});
+              });
+              setLocalData(localKey, local);
+              callback(local);
+            } else {
+              setLocalData(localKey, []);
+              callback([]);
             }
           }
-
-          setLocalData(localKey, uniqueItems);
-          callback(uniqueItems);
-          bus.emit(`inventory_${uid}`, uniqueItems);
         },
         (error) => {
           console.warn('Firestore inventory snapshot notice:', error);
-          const local = getLocalData(localKey, []);
+          const local = getLocalData(localKey, uid === 'demo_cafepulse_admin' ? INITIAL_INVENTORY_ITEMS : []);
           callback(local);
         }
       );

@@ -115,6 +115,7 @@ export function subscribeToAuth(callback) {
           let userRole = 'admin';
           let userRoleLabel = 'Store Administrator';
           let isStaffUser = false;
+          let storeUid = user.uid;
 
           if (db) {
             try {
@@ -127,6 +128,7 @@ export function subscribeToAuth(callback) {
                 if (uData.role) userRole = uData.role;
                 if (uData.roleLabel) userRoleLabel = uData.roleLabel;
                 if (uData.isStaff !== undefined) isStaffUser = Boolean(uData.isStaff);
+                if (uData.storeUid) storeUid = uData.storeUid;
               } else {
                 // Check if user is an invited staff member in staff_members collection
                 const staffQuery = query(
@@ -139,7 +141,9 @@ export function subscribeToAuth(callback) {
                   userRole = sData.role || 'barista';
                   userRoleLabel = sData.roleLabel || 'Shift Barista';
                   isStaffUser = true;
+                  storeUid = sData.userId || user.uid;
                   if (sData.branch) userBranchName = sData.branch;
+                  if (sData.cafeName) userCafeName = sData.cafeName;
                 }
               }
             } catch (e) {}
@@ -147,6 +151,7 @@ export function subscribeToAuth(callback) {
 
           const enrichedUser = {
             uid: user.uid,
+            storeUid: storeUid,
             email: user.email,
             displayName: user.displayName || user.email.split('@')[0],
             cafeName: userCafeName,
@@ -158,6 +163,7 @@ export function subscribeToAuth(callback) {
             photoURL: user.photoURL || null,
           };
           localStorage.setItem(LOCAL_AUTH_KEY, JSON.stringify(enrichedUser));
+          registerCafeInDirectory(enrichedUser);
           callback(enrichedUser);
 
           // Save user record to Firestore users collection
@@ -167,6 +173,7 @@ export function subscribeToAuth(callback) {
                 doc(db, 'users', user.uid),
                 {
                   uid: user.uid,
+                  storeUid: storeUid,
                   email: user.email,
                   displayName: enrichedUser.displayName,
                   cafeName: userCafeName,
@@ -181,9 +188,11 @@ export function subscribeToAuth(callback) {
             } catch (e) {}
           }
         } else {
-          // Firebase confirms no active session
+          // Firebase confirms no active Auth session - check local session for PIN/Demo logins
           const localSession = getCurrentUser();
-          if (!localSession) {
+          if (localSession) {
+            callback(localSession);
+          } else {
             callback(null);
           }
         }
@@ -440,6 +449,7 @@ export async function loginWithEmail(email, password) {
 
       const enrichedUser = {
         uid: user.uid,
+        storeUid: user.uid,
         email: user.email,
         displayName: user.displayName || user.email.split('@')[0],
         cafeName: userCafeName,
@@ -464,6 +474,7 @@ export async function loginWithEmail(email, password) {
   const cleanUid = getDeterministicLocalUid(cleanEmail);
   const user = {
     uid: cleanUid,
+    storeUid: cleanUid,
     email: cleanEmail,
     displayName: cleanEmail.split('@')[0],
     role: 'admin',
@@ -551,7 +562,7 @@ export async function loginWithPin(pin, email = null) {
   }
 
   const isAdminUser = foundStaff.role === 'admin';
-  const storeUid = foundStaff.userId || 'guest';
+  const storeUid = foundStaff.userId || 'demo_cafepulse_admin';
   const staffUser = {
     uid: storeUid,
     staffId: foundStaff.id,
@@ -592,6 +603,7 @@ export async function signupWithEmail(email, password, displayName = '', cafeNam
 
       const enrichedUser = {
         uid: user.uid,
+        storeUid: user.uid,
         email: user.email,
         displayName: finalName,
         cafeName: cleanCafeName,
@@ -606,6 +618,7 @@ export async function signupWithEmail(email, password, displayName = '', cafeNam
         try {
           await setDoc(doc(db, 'users', user.uid), {
             uid: user.uid,
+            storeUid: user.uid,
             email: user.email,
             displayName: finalName,
             cafeName: cleanCafeName,
@@ -653,6 +666,7 @@ export async function signupWithEmail(email, password, displayName = '', cafeNam
   const cleanUid = getDeterministicLocalUid(email);
   const user = {
     uid: cleanUid,
+    storeUid: cleanUid,
     email: email.trim(),
     displayName: finalName,
     cafeName: cleanCafeName,
@@ -687,10 +701,27 @@ export async function loginWithGoogle() {
       const result = await signInWithPopup(auth, provider);
       const user = result.user;
 
+      let userCafeName = 'Artisan Specialty Café';
+      let userBranchName = 'Main Flagship Branch';
+
+      if (db) {
+        try {
+          const uDoc = await getDoc(doc(db, 'users', user.uid));
+          if (uDoc.exists()) {
+            const uData = uDoc.data();
+            if (uData.cafeName) userCafeName = uData.cafeName;
+            if (uData.branchName) userBranchName = uData.branchName;
+          }
+        } catch (e) {}
+      }
+
       const enrichedUser = {
         uid: user.uid,
+        storeUid: user.uid,
         email: user.email,
         displayName: user.displayName || user.email.split('@')[0],
+        cafeName: userCafeName,
+        branchName: userBranchName,
         role: 'admin',
         roleLabel: 'Store Admin & General Manager',
         isStaff: false,
@@ -703,6 +734,7 @@ export async function loginWithGoogle() {
           doc(db, 'users', user.uid),
           {
             uid: user.uid,
+            storeUid: user.uid,
             email: user.email,
             displayName: enrichedUser.displayName,
             photoURL: enrichedUser.photoURL,
