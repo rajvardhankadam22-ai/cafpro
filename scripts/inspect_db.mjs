@@ -1,16 +1,37 @@
-import { collection, getDocs } from 'firebase/firestore';
+import { doc, setDoc, serverTimestamp, getDocs, collection, query, where } from 'firebase/firestore';
 import { db } from './firebaseClient.mjs';
+import { INITIAL_CATEGORIES } from '../services/seedData.js';
 
-console.log('--- Inspecting Firestore Collections ---');
+console.log('--- Testing Writes to All Collections ---');
 
-const vendorsSnap = await getDocs(collection(db, 'vendors'));
-console.log('Vendors in Firestore count:', vendorsSnap.docs.length);
-vendorsSnap.docs.forEach(d => {
-  console.log('Vendor:', d.id, d.data().name, 'userId:', d.data().userId);
-});
+const testUid = 'N5xIZvNiHSewIeGCtx1s9M9NUeY2'; // The real user UID from inspect_db
 
-const appsSnap = await getDocs(collection(db, 'supplier_applications'));
-console.log('\nSupplier Applications in Firestore count:', appsSnap.docs.length);
-appsSnap.docs.forEach(d => {
-  console.log('Application:', d.id, d.data().companyName, 'userId:', d.data().userId, 'status:', d.data().status);
-});
+// 1. Categories
+console.log('1. Testing category write...');
+try {
+  for (const cat of INITIAL_CATEGORIES) {
+    const docId = `${testUid}_${cat.id}`;
+    await setDoc(doc(db, 'categories', docId), {
+      ...cat,
+      id: cat.id,
+      originalId: cat.id,
+      userId: testUid,
+      createdAt: serverTimestamp(),
+    }, { merge: true });
+  }
+  console.log('✅ Categories write SUCCESS!');
+} catch (e) {
+  console.error('❌ Categories write FAILED:', e);
+}
+
+// 2. Query categories
+try {
+  const q = query(collection(db, 'categories'), where('userId', '==', testUid));
+  const snap = await getDocs(q);
+  console.log('✅ Categories query returned:', snap.docs.length, 'docs');
+} catch (e) {
+  console.error('❌ Categories query FAILED:', e);
+}
+
+
+

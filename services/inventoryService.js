@@ -219,47 +219,34 @@ export function subscribeToInventory(userId, callback) {
       unsubscribeFirestore = onSnapshot(
         q,
         (snapshot) => {
-          if (!snapshot.empty) {
-            const rawItems = snapshot.docs.map((d) => ({
-              ...d.data(),
-              id: d.id,
-            }));
+          const rawItems = snapshot.docs.map((d) => ({
+            ...d.data(),
+            id: d.id,
+          }));
 
-            // Deduplicate items cleanly by doc ID
-            const seen = new Set();
-            const uniqueItems = [];
-            for (const itm of rawItems) {
-              if (itm && itm.id && !seen.has(itm.id)) {
-                seen.add(itm.id);
-                uniqueItems.push(itm);
-              }
-            }
-
-            setLocalData(localKey, uniqueItems);
-            callback(uniqueItems);
-          } else {
-            // If cloud is empty, check if we have local offline items to sync up
-            const local = getLocalData(localKey, []);
-            if (local && local.length > 0) {
-              local.forEach((itm) => {
-                setDoc(
-                  doc(db, 'inventory_items', itm.id),
-                  { ...itm, userId: uid, updatedAt: serverTimestamp() },
-                  { merge: true }
-                ).catch(() => {});
-              });
-              callback(local);
-            } else {
-              callback([]);
+          // Deduplicate items cleanly by doc ID
+          const seen = new Set();
+          const uniqueItems = [];
+          for (const itm of rawItems) {
+            if (itm && itm.id && !seen.has(itm.id)) {
+              seen.add(itm.id);
+              uniqueItems.push(itm);
             }
           }
+
+          setLocalData(localKey, uniqueItems);
+          callback(uniqueItems);
+          bus.emit(`inventory_${uid}`, uniqueItems);
         },
-        () => {
+        (error) => {
+          console.warn('Firestore inventory snapshot notice:', error);
           const local = getLocalData(localKey, []);
           callback(local);
         }
       );
-    } catch (e) {}
+    } catch (e) {
+      console.warn('Firestore inventory query initialization notice:', e);
+    }
   }
 
   const unsubBus = bus.on(`inventory_${uid}`, (updated) => {
@@ -325,11 +312,13 @@ export function subscribeToCategories(userId, callback) {
               const data = d.data();
               return {
                 ...data,
-                id: data.originalId || data.id || d.id,
+                id: data.id || d.id,
+                docId: d.id,
               };
             });
             setLocalData(localCatsKey, categories);
             callback(categories);
+            bus.emit(`categories_${uid}`, categories);
           } else {
             // Seed INITIAL_CATEGORIES if empty and sync to Firestore
             const local = getLocalData(localCatsKey, INITIAL_CATEGORIES);
@@ -353,12 +342,15 @@ export function subscribeToCategories(userId, callback) {
             });
           }
         },
-        () => {
+        (err) => {
+          console.warn('Firestore categories snapshot notice:', err);
           const local = getLocalData(localCatsKey, INITIAL_CATEGORIES);
           callback(local && local.length > 0 ? local : INITIAL_CATEGORIES);
         }
       );
-    } catch (e) {}
+    } catch (e) {
+      console.warn('Firestore categories subscribe notice:', e);
+    }
   }
 
   const unsubBus = bus.on(`categories_${uid}`, callback);
@@ -585,7 +577,7 @@ export async function addInventoryItem(itemData, userId = DEFAULT_USER_ID) {
   const uid = userId || DEFAULT_USER_ID;
   const cleanData = {
     userId: uid,
-    name: itemData.name.trim(),
+    name: (itemData.name || '').trim(),
     categoryId: itemData.categoryId || 'cat-coffee',
     sku: itemData.sku ? itemData.sku.trim().toUpperCase() : '',
     quantity: Math.max(0, Number(itemData.quantity) || 0),
@@ -611,7 +603,7 @@ export async function addInventoryItem(itemData, userId = DEFAULT_USER_ID) {
         updatedAt: serverTimestamp(),
       });
     } catch (e) {
-      console.warn('Firestore add item error:', e);
+      console.warn('Firestore add item notice:', e);
     }
   }
 
@@ -626,6 +618,7 @@ export async function addInventoryItem(itemData, userId = DEFAULT_USER_ID) {
   const updated = [newItem, ...items.filter((i) => i.id !== newId)];
   setLocalData(itemsKey, updated);
   bus.emit(`inventory_${uid}`, updated);
+  bus.emit('all_items_updated', updated);
 
   logActivity(uid, 'CREATED', newId, cleanData.name, `Added with initial stock of ${cleanData.quantity} ${cleanData.unit}`, 'Café Manager', { delta: `+${cleanData.quantity} ${cleanData.unit}` });
   return newItem;
@@ -647,21 +640,27 @@ export async function updateInventoryItem(id, updatedData, userId = DEFAULT_USER
   if (isFirebaseConfigured() && db) {
     try {
       const docRef = doc(db, 'inventory_items', id);
-      await setDoc(docRef, { ...cleanData, updatedAt: serverTimestamp() }, { merge: true });
+      await setDoc(docRef, { ...cleanData, id, updatedAt: serverTimestamp() }, { merge: true });
+      if (!id.startsWith(uid + '_')) {
+        try {
+          await setDoc(doc(db, 'inventory_items', `${uid}_${id}`), { ...cleanData, id, updatedAt: serverTimestamp() }, { merge: true });
+        } catch (e) {}
+      }
     } catch (e) {
-      console.warn('Firestore update error:', e);
+      console.warn('Firestore update notice:', e);
     }
   }
 
   const itemsKey = getLocalItemsKey(uid);
   const items = getLocalData(itemsKey, []);
   const updated = items.map((item) =>
-    item.id === id
+    item.id === id || item.id === `${uid}_${id}`
       ? { ...item, ...cleanData, updatedAt: new Date().toISOString() }
       : item
   );
   setLocalData(itemsKey, updated);
   bus.emit(`inventory_${uid}`, updated);
+  bus.emit('all_items_updated', updated);
 
   logActivity(uid, 'UPDATED', id, cleanData.name || 'Item', `Updated item details and vendor mappings`, 'Café Manager');
 }
@@ -676,16 +675,22 @@ export async function deleteInventoryItem(id, userId = DEFAULT_USER_ID, itemName
   if (isFirebaseConfigured() && db) {
     try {
       await deleteDoc(doc(db, 'inventory_items', id));
+      if (!id.startsWith(uid + '_')) {
+        try {
+          await deleteDoc(doc(db, 'inventory_items', `${uid}_${id}`));
+        } catch (e) {}
+      }
     } catch (e) {
-      console.warn('Firestore delete item error:', e);
+      console.warn('Firestore delete item notice:', e);
     }
   }
 
   const itemsKey = getLocalItemsKey(uid);
   const items = getLocalData(itemsKey, []);
-  const updated = items.filter((item) => item.id !== id);
+  const updated = items.filter((item) => item.id !== id && item.id !== `${uid}_${id}`);
   setLocalData(itemsKey, updated);
   bus.emit(`inventory_${uid}`, updated);
+  bus.emit('all_items_updated', updated);
 
   logActivity(uid, 'DELETED', id, cleanItemName, `Removed from catalogue`, userName);
 }
@@ -718,6 +723,7 @@ export async function quickAdjustQuantity(id, delta, userId = DEFAULT_USER_ID, i
 
   setLocalData(itemsKey, updated);
   bus.emit(`inventory_${uid}`, updated);
+  bus.emit('all_items_updated', updated);
 
   // Commit to Firestore
   if (isFirebaseConfigured() && db) {
@@ -729,6 +735,11 @@ export async function quickAdjustQuantity(id, delta, userId = DEFAULT_USER_ID, i
       };
 
       await setDoc(doc(db, 'inventory_items', id), payload, { merge: true });
+      if (!id.startsWith(uid + '_')) {
+        try {
+          await setDoc(doc(db, 'inventory_items', `${uid}_${id}`), payload, { merge: true });
+        } catch (e) {}
+      }
     } catch (e) {
       console.warn('Firestore quantity adjustment notice:', e);
     }
@@ -1125,11 +1136,13 @@ export function subscribeToVendors(userId = DEFAULT_USER_ID, callback) {
               const data = doc.data();
               return {
                 ...data,
-                id: data.originalId || data.id || doc.id,
+                id: data.id || doc.id,
+                docId: doc.id,
               };
             });
             setLocalData(vendorsKey, firestoreVendors);
             callback(firestoreVendors);
+            bus.emit(`vendors_${uid}`, firestoreVendors);
           } else {
             const local = getLocalData(vendorsKey, INITIAL_VENDORS);
             const valid = local && local.length > 0 ? local : INITIAL_VENDORS;
@@ -1174,7 +1187,7 @@ export async function addVendor(vendorData, userId = DEFAULT_USER_ID, userName =
 
   const newVendor = {
     id: `ven_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-    name: vendorData.name.trim(),
+    name: (vendorData.name || '').trim(),
     contactPerson: vendorData.contactPerson ? vendorData.contactPerson.trim() : '',
     email: vendorData.email ? vendorData.email.trim() : '',
     password: vendorData.password ? vendorData.password.trim() : 'vendor123',
@@ -1357,6 +1370,69 @@ export async function updatePurchaseOrderDispatch(
 }
 
 /**
+ * Update Existing Vendor
+ */
+export async function updateVendor(id, updatedData, userId = DEFAULT_USER_ID) {
+  const uid = userId || DEFAULT_USER_ID;
+  const cleanData = { ...updatedData, userId: uid };
+
+  if (isFirebaseConfigured() && db) {
+    try {
+      const docId = id.startsWith(uid + '_') ? id : `${uid}_${id}`;
+      await setDoc(doc(db, 'vendors', docId), {
+        ...cleanData,
+        id,
+        updatedAt: serverTimestamp(),
+      }, { merge: true });
+      try {
+        await setDoc(doc(db, 'vendors', id), {
+          ...cleanData,
+          id,
+          updatedAt: serverTimestamp(),
+        }, { merge: true });
+      } catch (e) {}
+    } catch (e) {
+      console.warn('Notice updating vendor:', e.message);
+    }
+  }
+
+  const vendorsKey = getLocalVendorsKey(uid);
+  const currentVendors = getLocalData(vendorsKey, []);
+  const updatedVendors = currentVendors.map((v) =>
+    v.id === id || v.id === `${uid}_${id}` ? { ...v, ...cleanData, updatedAt: new Date().toISOString() } : v
+  );
+  setLocalData(vendorsKey, updatedVendors);
+  bus.emit(`vendors_${uid}`, updatedVendors);
+  bus.emit('all_vendors_updated', updatedVendors);
+}
+
+/**
+ * Delete Vendor
+ */
+export async function deleteVendor(id, userId = DEFAULT_USER_ID) {
+  const uid = userId || DEFAULT_USER_ID;
+
+  if (isFirebaseConfigured() && db) {
+    try {
+      const docId = id.startsWith(uid + '_') ? id : `${uid}_${id}`;
+      await deleteDoc(doc(db, 'vendors', docId));
+      try {
+        await deleteDoc(doc(db, 'vendors', id));
+      } catch (e) {}
+    } catch (e) {
+      console.warn('Notice deleting vendor:', e.message);
+    }
+  }
+
+  const vendorsKey = getLocalVendorsKey(uid);
+  const currentVendors = getLocalData(vendorsKey, []);
+  const updatedVendors = currentVendors.filter((v) => v.id !== id && v.id !== `${uid}_${id}`);
+  setLocalData(vendorsKey, updatedVendors);
+  bus.emit(`vendors_${uid}`, updatedVendors);
+  bus.emit('all_vendors_updated', updatedVendors);
+}
+
+/**
  * Categories CRUD
  */
 export async function addCategory(categoryData, userId = DEFAULT_USER_ID) {
@@ -1407,10 +1483,21 @@ export async function updateCategory(id, updatedData, userId = DEFAULT_USER_ID) 
 
   if (isFirebaseConfigured() && db) {
     try {
-      await updateDoc(doc(db, 'categories', id), {
+      const docId = id.startsWith(uid + '_') ? id : `${uid}_${id}`;
+      await setDoc(doc(db, 'categories', docId), {
         ...clean,
+        id,
+        userId: uid,
         updatedAt: serverTimestamp(),
-      });
+      }, { merge: true });
+      try {
+        await setDoc(doc(db, 'categories', id), {
+          ...clean,
+          id,
+          userId: uid,
+          updatedAt: serverTimestamp(),
+        }, { merge: true });
+      } catch (e) {}
     } catch (e) {
       console.warn('Notice updating category:', e.message);
     }
@@ -1418,7 +1505,7 @@ export async function updateCategory(id, updatedData, userId = DEFAULT_USER_ID) 
 
   const catsKey = getLocalCategoriesKey(uid);
   const categories = getLocalData(catsKey, INITIAL_CATEGORIES);
-  const updatedCats = categories.map((c) => (c.id === id ? { ...c, ...clean, updatedAt: new Date().toISOString() } : c));
+  const updatedCats = categories.map((c) => (c.id === id || c.id === `${uid}_${id}` ? { ...c, ...clean, updatedAt: new Date().toISOString() } : c));
   setLocalData(catsKey, updatedCats);
   bus.emit(`categories_${uid}`, updatedCats);
 }
@@ -1428,7 +1515,11 @@ export async function deleteCategory(id, userId = DEFAULT_USER_ID) {
 
   if (isFirebaseConfigured() && db) {
     try {
-      await deleteDoc(doc(db, 'categories', id));
+      const docId = id.startsWith(uid + '_') ? id : `${uid}_${id}`;
+      await deleteDoc(doc(db, 'categories', docId));
+      try {
+        await deleteDoc(doc(db, 'categories', id));
+      } catch (e) {}
     } catch (e) {
       console.warn('Notice deleting category:', e.message);
     }
@@ -1436,8 +1527,8 @@ export async function deleteCategory(id, userId = DEFAULT_USER_ID) {
 
   const catsKey = getLocalCategoriesKey(uid);
   const categories = getLocalData(catsKey, INITIAL_CATEGORIES);
-  const targetCat = categories.find((c) => c.id === id);
-  const updatedCats = categories.filter((c) => c.id !== id);
+  const targetCat = categories.find((c) => c.id === id || c.id === `${uid}_${id}`);
+  const updatedCats = categories.filter((c) => c.id !== id && c.id !== `${uid}_${id}`);
   setLocalData(catsKey, updatedCats);
   bus.emit(`categories_${uid}`, updatedCats);
 
@@ -1620,53 +1711,6 @@ export function subscribeToAllRegisteredCafes(callback) {
     busItems();
     busPos();
   };
-}
-
-/**
- * Update Existing Vendor
- */
-export async function updateVendor(id, updatedData, userId = DEFAULT_USER_ID) {
-  const uid = userId || DEFAULT_USER_ID;
-  const vendorsKey = getLocalVendorsKey(uid);
-  const currentVendors = getLocalData(vendorsKey, []);
-
-  if (isFirebaseConfigured() && db) {
-    try {
-      await updateDoc(doc(db, 'vendors', id), {
-        ...updatedData,
-        updatedAt: serverTimestamp(),
-      });
-    } catch (e) {
-      console.warn('Notice updating vendor:', e.message);
-    }
-  }
-
-  const updatedVendors = currentVendors.map((v) =>
-    v.id === id ? { ...v, ...updatedData, updatedAt: new Date().toISOString() } : v
-  );
-  setLocalData(vendorsKey, updatedVendors);
-  bus.emit(`vendors_${uid}`, updatedVendors);
-}
-
-/**
- * Delete Vendor
- */
-export async function deleteVendor(id, userId = DEFAULT_USER_ID) {
-  const uid = userId || DEFAULT_USER_ID;
-  const vendorsKey = getLocalVendorsKey(uid);
-  const currentVendors = getLocalData(vendorsKey, []);
-
-  if (isFirebaseConfigured() && db) {
-    try {
-      await deleteDoc(doc(db, 'vendors', id));
-    } catch (e) {
-      console.warn('Notice deleting vendor:', e.message);
-    }
-  }
-
-  const updatedVendors = currentVendors.filter((v) => v.id !== id);
-  setLocalData(vendorsKey, updatedVendors);
-  bus.emit(`vendors_${uid}`, updatedVendors);
 }
 
 export const INITIAL_SUPPLIER_APPLICATIONS = [];
@@ -2070,11 +2114,13 @@ export function subscribeToStaffMembers(userId = DEFAULT_USER_ID, callback) {
               const data = doc.data();
               return {
                 ...data,
-                id: data.originalId || data.id || doc.id,
+                id: data.id || doc.id,
+                docId: doc.id,
               };
             });
             setLocalData(staffKey, firestoreStaff);
             callback(firestoreStaff);
+            bus.emit(`staff_${uid}`, firestoreStaff);
           } else {
             const local = getLocalData(staffKey, INITIAL_STAFF_MEMBERS);
             const valid = local && local.length > 0 ? local : INITIAL_STAFF_MEMBERS;
@@ -2118,7 +2164,7 @@ export async function addStaffMember(staffData, userId = DEFAULT_USER_ID, userNa
     id: 'staff-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
     userId: uid,
     name: staffData.name.trim(),
-    email: staffData.email.trim(),
+    email: staffData.email.trim().toLowerCase(),
     phone: staffData.phone ? staffData.phone.trim() : '',
     role: staffData.role || 'barista',
     roleLabel: staffData.roleLabel || 'Shift Barista',
@@ -2167,17 +2213,26 @@ export async function updateStaffMember(id, staffData, userId = DEFAULT_USER_ID,
 
   if (isFirebaseConfigured() && db) {
     try {
-      await updateDoc(doc(db, 'staff_members', id), {
+      const docId = id.startsWith(uid + '_') ? id : `${uid}_${id}`;
+      await setDoc(doc(db, 'staff_members', docId), {
         ...staffData,
+        id,
         updatedAt: serverTimestamp(),
-      });
+      }, { merge: true });
+      try {
+        await setDoc(doc(db, 'staff_members', id), {
+          ...staffData,
+          id,
+          updatedAt: serverTimestamp(),
+        }, { merge: true });
+      } catch (e) {}
     } catch (e) {
       console.warn('Notice updating staff member:', e.message);
     }
   }
 
   const updatedStaff = currentStaff.map((s) =>
-    s.id === id ? { ...s, ...staffData, updatedAt: new Date().toISOString() } : s
+    s.id === id || s.id === `${uid}_${id}` ? { ...s, ...staffData, updatedAt: new Date().toISOString() } : s
   );
   setLocalData(staffKey, updatedStaff);
   bus.emit(`staff_${uid}`, updatedStaff);
@@ -2199,11 +2254,15 @@ export async function deleteStaffMember(id, userId = DEFAULT_USER_ID, userName =
   const uid = userId || DEFAULT_USER_ID;
   const staffKey = getLocalStaffKey(uid);
   const currentStaff = getLocalData(staffKey, []);
-  const target = currentStaff.find((s) => s.id === id);
+  const target = currentStaff.find((s) => s.id === id || s.id === `${uid}_${id}`);
 
   if (isFirebaseConfigured() && db) {
     try {
-      await deleteDoc(doc(db, 'staff_members', id));
+      const docId = id.startsWith(uid + '_') ? id : `${uid}_${id}`;
+      await deleteDoc(doc(db, 'staff_members', docId));
+      try {
+        await deleteDoc(doc(db, 'staff_members', id));
+      } catch (e) {}
       if (target?.email) {
         const q = query(
           collection(db, 'staff_members'),
@@ -2220,7 +2279,7 @@ export async function deleteStaffMember(id, userId = DEFAULT_USER_ID, userName =
     }
   }
 
-  const updatedStaff = currentStaff.filter((s) => s.id !== id);
+  const updatedStaff = currentStaff.filter((s) => s.id !== id && s.id !== `${uid}_${id}`);
   setLocalData(staffKey, updatedStaff);
   bus.emit(`staff_${uid}`, updatedStaff);
 
@@ -2241,18 +2300,25 @@ export async function toggleStaffStatus(id, newStatus, userId = DEFAULT_USER_ID,
   const uid = userId || DEFAULT_USER_ID;
   const staffKey = getLocalStaffKey(uid);
   const currentStaff = getLocalData(staffKey, []);
-  const target = currentStaff.find((s) => s.id === id);
+  const target = currentStaff.find((s) => s.id === id || s.id === `${uid}_${id}`);
 
   if (isFirebaseConfigured() && db) {
     try {
-      await updateDoc(doc(db, 'staff_members', id), {
+      const docId = id.startsWith(uid + '_') ? id : `${uid}_${id}`;
+      await setDoc(doc(db, 'staff_members', docId), {
         status: newStatus,
         updatedAt: serverTimestamp(),
-      });
+      }, { merge: true });
+      try {
+        await setDoc(doc(db, 'staff_members', id), {
+          status: newStatus,
+          updatedAt: serverTimestamp(),
+        }, { merge: true });
+      } catch (e) {}
     } catch (e) {}
   }
 
-  const updatedStaff = currentStaff.map((s) => (s.id === id ? { ...s, status: newStatus } : s));
+  const updatedStaff = currentStaff.map((s) => (s.id === id || s.id === `${uid}_${id}` ? { ...s, status: newStatus } : s));
   setLocalData(staffKey, updatedStaff);
   bus.emit(`staff_${uid}`, updatedStaff);
 
@@ -2261,7 +2327,7 @@ export async function toggleStaffStatus(id, newStatus, userId = DEFAULT_USER_ID,
     'STAFF_STATUS_CHANGED',
     id,
     target?.name || 'Staff Member',
-    `Changed ${target?.name}'s account status to ${newStatus}`,
+    `Changed ${target?.name || 'Staff'}'s account status to ${newStatus}`,
     userName
   );
 }

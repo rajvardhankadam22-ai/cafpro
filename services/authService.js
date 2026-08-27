@@ -303,6 +303,18 @@ export async function loginWithEmail(email, password) {
             const uData = uDoc.data();
             if (uData.cafeName) userCafeName = uData.cafeName;
             if (uData.branchName) userBranchName = uData.branchName;
+          } else {
+            await setDoc(doc(db, 'users', user.uid), {
+              uid: user.uid,
+              email: user.email,
+              displayName: user.displayName || user.email.split('@')[0],
+              cafeName: userCafeName,
+              branchName: userBranchName,
+              role: 'admin',
+              roleLabel: 'Store Administrator',
+              isStaff: false,
+              lastLogin: serverTimestamp(),
+            }, { merge: true });
           }
         } catch (e) {}
       }
@@ -472,26 +484,31 @@ export async function signupWithEmail(email, password, displayName = '', cafeNam
       };
 
       if (db) {
-        setDoc(doc(db, 'users', user.uid), {
-          uid: user.uid,
-          email: user.email,
-          displayName: finalName,
-          cafeName: cleanCafeName,
-          role: 'admin',
-          roleLabel: 'Store Admin & General Manager',
-          isStaff: false,
-          createdAt: serverTimestamp(),
-        }).catch(() => {});
-
-        // Seed initial categories in Firestore
-        INITIAL_CATEGORIES.forEach((cat) => {
-          setDoc(doc(db, 'categories', `${user.uid}_${cat.id}`), {
-            ...cat,
-            id: `${user.uid}_${cat.id}`,
-            userId: user.uid,
+        try {
+          await setDoc(doc(db, 'users', user.uid), {
+            uid: user.uid,
+            email: user.email,
+            displayName: finalName,
+            cafeName: cleanCafeName,
+            role: 'admin',
+            roleLabel: 'Store Admin & General Manager',
+            isStaff: false,
             createdAt: serverTimestamp(),
-          }, { merge: true }).catch(() => {});
-        });
+          }, { merge: true });
+
+          // Seed initial categories in Firestore
+          for (const cat of INITIAL_CATEGORIES) {
+            await setDoc(doc(db, 'categories', `${user.uid}_${cat.id}`), {
+              ...cat,
+              id: cat.id,
+              originalId: cat.id,
+              userId: user.uid,
+              createdAt: serverTimestamp(),
+            }, { merge: true });
+          }
+        } catch (dbErr) {
+          console.warn('Firestore user profile seed notice:', dbErr);
+        }
       }
 
       // Initialize clean user workspace with default categories

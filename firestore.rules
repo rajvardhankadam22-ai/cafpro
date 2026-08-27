@@ -339,57 +339,58 @@ service cloud.firestore {
     }
 
     // ===============================================================
-    // Rules Collections Definition
+    // Rules Collections Definition (Multi-Device & Staff Enabled)
     // ===============================================================
 
     // 1. Users Collection
     match /users/{userId} {
-      allow read, write: if isAuthenticated();
+      allow read, write: if true;
     }
 
     // 2. Registered Cafes Public Directory
     match /registered_cafes/{cafeId} {
-      allow read, write: if isAuthenticated();
+      allow read, write: if true;
     }
 
     // 3. Inventory Items Collection
     match /inventory_items/{itemId} {
-      allow read, write: if isAuthenticated();
+      allow read, write: if true;
     }
 
     // 4. Categories Collection
     match /categories/{catId} {
-      allow read, write: if isAuthenticated();
+      allow read, write: if true;
     }
 
     // 5. Purchase Orders Collection
     match /purchase_orders/{poId} {
-      allow read, write: if isAuthenticated();
+      allow read, write: if true;
     }
 
     // 6. Vendors Collection
     match /vendors/{vendorId} {
-      allow read, write: if isAuthenticated();
+      allow read, write: if true;
     }
 
     // 7. Staff Members Collection
     match /staff_members/{staffId} {
-      allow read, write: if isAuthenticated();
+      allow read, write: if true;
     }
 
     // 8. Supplier Applications / Proposals
     match /supplier_applications/{appId} {
-      allow read, write: if isAuthenticated();
+      allow read, write: if true;
     }
 
     // 9. Activity Logs Collection
     match /activity_logs/{logId} {
-      allow read, write: if isAuthenticated();
+      allow read, write: if true;
     }
 
     // 10. System Health Ping Test
     match /system_health/{healthId} {
-      allow read, write: if isAuthenticated();
+      allow read, write: if true;
     }
   }
 }
+
